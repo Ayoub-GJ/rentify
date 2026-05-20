@@ -1,7 +1,8 @@
-import { 
+import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
@@ -97,6 +98,13 @@ export const logout = async (): Promise<void> => {
     console.error('Erreur logout:', error);
     throw new Error(error.message || 'Erreur lors de la déconnexion');
   }
+};
+
+/**
+ * Envoyer un email de réinitialisation de mot de passe
+ */
+export const resetPassword = async (email: string): Promise<void> => {
+  await sendPasswordResetEmail(auth, email);
 };
 
 /**
