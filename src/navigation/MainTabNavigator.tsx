@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
-import HomeScreen from '../screens/HomeScreen';
+import HomeScreen from '../screens/home/HomeScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
