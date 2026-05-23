@@ -81,7 +81,7 @@ const MOCK_ITEMS: MockItem[] = [
     ville: 'Agadir',
     prixParJour: 20,
     disponible: true,
-    images: ['https://source.unsplash.com/Su0SedcyOkQ/400x300'],
+    images: ['https://images.unsplash.com/photo-1589923158776-cb4485d99fd6?w=400'],
     note: 4.6,
     avis: 11,
   },
