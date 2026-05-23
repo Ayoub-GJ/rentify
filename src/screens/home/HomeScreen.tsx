@@ -10,7 +10,7 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUser } from '../../services/authService';
 import {
@@ -24,6 +24,7 @@ import {
 } from '../../theme/theme';
 
 // ─── Types ───────────────────────────────────────────────────
+// TODO: Ajouter badge vérifié sur profil (Phase 4)
 
 interface MockItem {
   id: string;
@@ -33,7 +34,6 @@ interface MockItem {
   prixParJour: number;
   disponible: boolean;
   images: string[];
-  description: string;
   note: number;
   avis: number;
 }
@@ -43,75 +43,91 @@ interface MockItem {
 const MOCK_ITEMS: MockItem[] = [
   {
     id: '1',
-    titre: 'Perceuse Bosch 18V',
+    titre: 'Perceuse Bosch GSB 18V',
     categorie: 'outils',
     ville: 'Agadir',
     prixParJour: 25,
     disponible: true,
     images: ['https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400'],
-    description: 'Perceuse professionnelle sans fil.',
     note: 4.9,
     avis: 32,
   },
   {
     id: '2',
-    titre: 'Appareil Photo Sony A7',
+    titre: 'Appareil Photo Sony A7 III',
     categorie: 'photo',
     ville: 'Agadir',
     prixParJour: 80,
     disponible: true,
     images: ['https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400'],
-    description: 'Sony Alpha A7 III avec objectif.',
     note: 4.8,
     avis: 18,
   },
   {
     id: '3',
-    titre: 'Vélo VTT Trek',
+    titre: 'Vélo VTT Trek Marlin',
     categorie: 'sport',
     ville: 'Agadir',
     prixParJour: 35,
     disponible: true,
-    images: ['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400'],
-    description: 'VTT 29 pouces tout suspendu.',
+    images: ['https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?w=400'],
     note: 4.7,
     avis: 24,
   },
   {
     id: '4',
-    titre: 'Tondeuse Gazon Bosch',
+    titre: 'Tondeuse Bosch Rotak',
     categorie: 'jardinage',
     ville: 'Agadir',
     prixParJour: 20,
     disponible: true,
-    images: ['https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400'],
-    description: 'Tondeuse électrique 1800W.',
+    images: ['https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400'],
     note: 4.6,
     avis: 11,
   },
   {
     id: '5',
-    titre: 'MacBook Pro 14"',
+    titre: 'MacBook Pro 14" M3',
     categorie: 'informatique',
     ville: 'Agadir',
     prixParJour: 120,
     disponible: true,
     images: ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400'],
-    description: 'MacBook Pro M3 14 pouces.',
     note: 5.0,
     avis: 7,
   },
   {
     id: '6',
-    titre: 'Tente Camping 4 places',
+    titre: 'Tente Camping Quechua',
     categorie: 'sport',
     ville: 'Agadir',
     prixParJour: 30,
     disponible: true,
-    images: ['https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400'],
-    description: 'Tente imperméable 4 saisons.',
+    images: ['https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=400'],
     note: 4.5,
     avis: 15,
+  },
+  {
+    id: '7',
+    titre: 'Sono JBL Xtreme 3',
+    categorie: 'evenement',
+    ville: 'Agadir',
+    prixParJour: 45,
+    disponible: true,
+    images: ['https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400'],
+    note: 4.8,
+    avis: 29,
+  },
+  {
+    id: '8',
+    titre: 'Karcher Nettoyeur HP',
+    categorie: 'maison',
+    ville: 'Agadir',
+    prixParJour: 40,
+    disponible: true,
+    images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400'],
+    note: 4.4,
+    avis: 8,
   },
 ];
 
@@ -144,13 +160,19 @@ function ItemCard({ item, cardWidth }: ItemCardProps) {
       </View>
 
       <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
+        <Text style={styles.cardTitle} numberOfLines={2}>
           {item.titre}
         </Text>
 
         <View style={styles.cardLocation}>
           <Ionicons name="location" size={11} color={Colors.primary} />
           <Text style={styles.cardLocationText}>{item.ville}</Text>
+        </View>
+
+        <View style={styles.cardRating}>
+          <Ionicons name="star" size={12} color="#F0A020" />
+          <Text style={styles.cardRatingNote}>{item.note}</Text>
+          <Text style={styles.cardRatingAvis}>({item.avis} avis)</Text>
         </View>
 
         <View style={styles.cardFooter}>
@@ -168,6 +190,7 @@ function ItemCard({ item, cardWidth }: ItemCardProps) {
 
 export default function HomeScreen() {
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('tout');
@@ -202,9 +225,9 @@ export default function HomeScreen() {
   const ListHeader = (
     <>
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Bonjour, {prenom} 👋</Text>
+          <Text style={styles.greeting}>Bonjour, {prenom} !</Text>
           <View style={styles.locationRow}>
             <Ionicons name="location" size={14} color={Colors.primary} />
             <Text style={styles.locationText}>Agadir, Maroc</Text>
@@ -256,7 +279,7 @@ export default function HomeScreen() {
             >
               <Ionicons
                 name={cat.icon as any}
-                size={15}
+                size={16}
                 color={isActive ? Colors.textInverse : cat.color}
               />
               <Text style={[styles.chipLabel, isActive ? styles.chipLabelActive : styles.chipLabelInactive]}>
@@ -278,7 +301,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={[]}>
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id}
@@ -316,7 +339,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
     paddingBottom: Spacing.sm,
     backgroundColor: Colors.background,
   },
@@ -401,7 +423,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 36,
+    height: 40,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.lg - Spacing.xs,
     gap: Spacing.xs,
@@ -494,6 +516,21 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBody,
     fontSize: Typography.size.xs,
     color: Colors.textSecondary,
+  },
+  cardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  cardRatingNote: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 12,
+    color: Colors.textPrimary,
+  },
+  cardRatingAvis: {
+    fontFamily: Typography.fontBody,
+    fontSize: 11,
+    color: Colors.textTertiary,
   },
   cardFooter: {
     marginTop: Spacing.xs,
