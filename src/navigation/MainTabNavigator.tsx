@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
+import AddItemScreen from '../screens/items/AddItemScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -69,10 +70,11 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="AddItem"
-        component={Placeholder}
+        component={AddItemScreen}
         options={{
           tabBarLabel: () => null,
           tabBarShowLabel: false,
+          tabBarStyle: { display: 'none' },
           tabBarIcon: () => (
             <View style={styles.addButton}>
               <Ionicons name="add" size={30} color="white" />
