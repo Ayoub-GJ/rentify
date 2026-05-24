@@ -59,7 +59,7 @@ export default function ItemDetailScreen() {
     <View style={styles.root}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
       >
         {/* ── Image hero ── */}
         <View>
@@ -183,7 +183,7 @@ export default function ItemDetailScreen() {
       </ScrollView>
 
       {/* ── Bottom bar ── */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.lg }]}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.bottomPriceBlock}>
           <Text style={styles.bottomPrice}>
             {item.prixParJour} MAD
@@ -208,10 +208,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-
   // ── Image hero ──
   heroImage: {
     width: '100%',
@@ -421,11 +417,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Spacing.lg,
-    paddingHorizontal: Layout.screenPadding,
+    paddingTop: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    ...Shadows.md,
+    elevation: 10,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   bottomPriceBlock: {
     gap: 0,
