@@ -1,12 +1,18 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
+import type { MockItem } from '../data/items';
 
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
 };
 
-export type MainTabParamList = {
+export type HomeStackParamList = {
   Home: undefined;
+  ItemDetail: { item: MockItem };
+};
+
+export type MainTabParamList = {
+  Home: NavigatorScreenParams<HomeStackParamList>;
   Search: undefined;
   AddItem: undefined;
   Locations: undefined;
