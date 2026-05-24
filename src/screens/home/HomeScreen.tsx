@@ -10,8 +10,10 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
 import {
   Colors,
@@ -22,114 +24,12 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
+import { MOCK_ITEMS, MockItem } from '../../data/items';
+import { HomeStackParamList } from '../../navigation/types';
 
-// ─── Types ───────────────────────────────────────────────────
 // TODO: Ajouter badge vérifié sur profil (Phase 4)
 
-interface MockItem {
-  id: string;
-  titre: string;
-  categorie: string;
-  ville: string;
-  prixParJour: number;
-  disponible: boolean;
-  images: string[];
-  note: number;
-  avis: number;
-}
-
-// ─── Données mock ─────────────────────────────────────────────
-
-const MOCK_ITEMS: MockItem[] = [
-  {
-    id: '1',
-    titre: 'Perceuse Bosch GSB 18V',
-    categorie: 'outils',
-    ville: 'Agadir',
-    prixParJour: 25,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400'],
-    note: 4.9,
-    avis: 32,
-  },
-  {
-    id: '2',
-    titre: 'Appareil Photo Sony A7 III',
-    categorie: 'photo',
-    ville: 'Agadir',
-    prixParJour: 80,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400'],
-    note: 4.8,
-    avis: 18,
-  },
-  {
-    id: '3',
-    titre: 'Vélo VTT Trek Marlin',
-    categorie: 'sport',
-    ville: 'Agadir',
-    prixParJour: 35,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?w=400'],
-    note: 4.7,
-    avis: 24,
-  },
-  {
-    id: '4',
-    titre: 'Tondeuse Bosch Rotak',
-    categorie: 'jardinage',
-    ville: 'Agadir',
-    prixParJour: 20,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1589923158776-cb4485d99fd6?w=400'],
-    note: 4.6,
-    avis: 11,
-  },
-  {
-    id: '5',
-    titre: 'MacBook Pro 14" M3',
-    categorie: 'informatique',
-    ville: 'Agadir',
-    prixParJour: 120,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400'],
-    note: 5.0,
-    avis: 7,
-  },
-  {
-    id: '6',
-    titre: 'Tente Camping Quechua',
-    categorie: 'sport',
-    ville: 'Agadir',
-    prixParJour: 30,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1537225228614-56cc3556d7ed?w=400'],
-    note: 4.5,
-    avis: 15,
-  },
-  {
-    id: '7',
-    titre: 'Sono JBL Xtreme 3',
-    categorie: 'evenement',
-    ville: 'Agadir',
-    prixParJour: 45,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400'],
-    note: 4.8,
-    avis: 29,
-  },
-  {
-    id: '8',
-    titre: 'Karcher Nettoyeur HP',
-    categorie: 'maison',
-    ville: 'Agadir',
-    prixParJour: 40,
-    disponible: true,
-    images: ['https://images.unsplash.com/photo-1558317374-067fb5f30001?w=400'],
-    note: 4.4,
-    avis: 8,
-  },
-];
+type HomeNavProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
 const CHIPS = [ALL_CHIP, ...Categories] as const;
@@ -139,14 +39,15 @@ const CHIPS = [ALL_CHIP, ...Categories] as const;
 interface ItemCardProps {
   item: MockItem;
   cardWidth: number;
+  onPress: () => void;
 }
 
-function ItemCard({ item, cardWidth }: ItemCardProps) {
+function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
   return (
     <TouchableOpacity
       style={[styles.card, { width: cardWidth }]}
       activeOpacity={0.88}
-      onPress={() => console.log(item.id)}
+      onPress={onPress}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -191,6 +92,7 @@ function ItemCard({ item, cardWidth }: ItemCardProps) {
 export default function HomeScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<HomeNavProp>();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('tout');
@@ -218,8 +120,14 @@ export default function HomeScreen() {
   }, [screenWidth]);
 
   const renderItem = useCallback(
-    ({ item }: { item: MockItem }) => <ItemCard item={item} cardWidth={cardWidth} />,
-    [cardWidth],
+    ({ item }: { item: MockItem }) => (
+      <ItemCard
+        item={item}
+        cardWidth={cardWidth}
+        onPress={() => navigation.navigate('ItemDetail', { item })}
+      />
+    ),
+    [cardWidth, navigation],
   );
 
   const ListHeader = (
@@ -301,7 +209,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={[]}>
+    <View style={styles.root}>
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id}
@@ -318,14 +226,14 @@ export default function HomeScreen() {
           </View>
         }
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
     backgroundColor: Colors.background,
   },

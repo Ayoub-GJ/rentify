@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
-import HomeScreen from '../screens/home/HomeScreen';
+import HomeNavigator from './HomeNavigator';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -52,7 +52,7 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen
         name="Home"
-        component={HomeScreen}
+        component={HomeNavigator}
         options={{
           tabBarLabel: 'Accueil',
           tabBarIcon: ({ color, focused }) => (
