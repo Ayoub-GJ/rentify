@@ -71,6 +71,7 @@ export default function MainTabNavigator() {
         name="AddItem"
         component={Placeholder}
         options={{
+          tabBarLabel: () => null,
           tabBarShowLabel: false,
           tabBarIcon: () => (
             <View style={styles.addButton}>
