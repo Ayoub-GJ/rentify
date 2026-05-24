@@ -59,7 +59,7 @@ export default function ItemDetailScreen() {
     <View style={styles.root}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
       >
         {/* ── Image hero ── */}
         <View>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   // ── Image hero ──
   heroImage: {
     width: '100%',
-    height: 300,
+    height: 320,
   },
   heroButton: {
     position: 'absolute',
