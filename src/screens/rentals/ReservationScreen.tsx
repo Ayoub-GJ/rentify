@@ -353,7 +353,7 @@ export default function ReservationScreen() {
               {endDate ? formatDisplay(endDate) : ''}
             </Text>
             <Text style={styles.summaryNights}>
-              {'  '}•{'  '}{duration} nuit{duration > 1 ? 's' : ''}
+              {'  '}•{'  '}{duration} jour{duration > 1 ? 's' : ''}
             </Text>
           </View>
           <Text style={styles.summaryCalc}>
