@@ -9,6 +9,7 @@ export type AuthStackParamList = {
 export type HomeStackParamList = {
   Home: undefined;
   ItemDetail: { item: MockItem };
+  Reservation: { item: MockItem };
 };
 
 export type MainTabParamList = {
