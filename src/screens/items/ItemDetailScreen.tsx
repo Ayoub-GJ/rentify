@@ -184,18 +184,44 @@ export default function ItemDetailScreen() {
       </ScrollView>
 
       {/* ── Bottom bar ── */}
-      <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'android' ? 16 : Math.max(insets.bottom, 16) }]}>
-        <View style={styles.bottomPriceBlock}>
-          <Text style={styles.bottomPrice}>
+      <View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: Platform.OS === 'android' ? 20 : insets.bottom + 12,
+        backgroundColor: Colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: Colors.border,
+        elevation: 10,
+      }}>
+        <View>
+          <Text style={{ fontSize: 22, fontFamily: Typography.fontDisplay, color: Colors.primary }}>
             {item.prixParJour} MAD
-            <Text style={styles.bottomPriceUnit}> /jour</Text>
+          </Text>
+          <Text style={{ fontSize: 12, color: Colors.textTertiary, fontFamily: Typography.fontBody }}>
+            par jour
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.reserveButton, { width: screenWidth * 0.6 }]}
           activeOpacity={0.88}
+          style={{
+            backgroundColor: Colors.primary,
+            borderRadius: Radius.full,
+            height: 52,
+            paddingHorizontal: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <Text style={styles.reserveButtonText}>Réserver</Text>
+          <Text style={{ color: 'white', fontSize: 16, fontFamily: Typography.fontHeading }}>
+            Réserver
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -408,50 +434,4 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
 
-  // ── Bottom bar ──
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    elevation: 10,
-    shadowColor: '#1A1A2E',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-  },
-  bottomPriceBlock: {
-    gap: 0,
-  },
-  bottomPrice: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: 22,
-    color: Colors.primary,
-  },
-  bottomPriceUnit: {
-    fontFamily: Typography.fontBody,
-    fontSize: 13,
-    color: Colors.textTertiary,
-  },
-  reserveButton: {
-    height: 52,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.button,
-  },
-  reserveButtonText: {
-    fontFamily: Typography.fontHeading,
-    fontSize: 16,
-    color: Colors.textInverse,
-  },
 });
