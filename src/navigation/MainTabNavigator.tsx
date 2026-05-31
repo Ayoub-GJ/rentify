@@ -48,7 +48,7 @@ export default function MainTabNavigator() {
         component={HomeStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Home';
-          const hideTabBar = focusedRoute === 'ItemDetail';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation';
           return {
             tabBarLabel: 'Accueil',
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
