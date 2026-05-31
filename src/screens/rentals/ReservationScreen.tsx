@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,88 +10,253 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 import { HomeStackParamList } from '../../navigation/types';
 
 type NavProp = StackNavigationProp<HomeStackParamList, 'Reservation'>;
 type RouteType = RouteProp<HomeStackParamList, 'Reservation'>;
 
-function formatDate(date: Date): string {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  return `${d}/${m}/${date.getFullYear()}`;
+// ─── Constants ───────────────────────────────────────────────
+
+const DAY_LABELS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+const MONTH_NAMES = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
 }
 
-function diffDays(start: Date, end: Date): number {
-  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+// Mon=0 … Sun=6
+function getFirstDayOffset(year: number, month: number): number {
+  const jsDay = new Date(year, month, 1).getDay(); // 0=Sun, 1=Mon…
+  return jsDay === 0 ? 6 : jsDay - 1;
 }
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function startOfDay(d: Date): Date {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+}
+
+function formatDisplay(d: Date): string {
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()].slice(0, 4).toLowerCase()}.`;
+}
+
+function diffDays(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+}
+
+// ─── Component ───────────────────────────────────────────────
 
 export default function ReservationScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
   const { item } = route.params;
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = startOfDay(new Date());
 
+  const [currentMonth, setCurrentMonth] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1),
+  );
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
   const [message, setMessage] = useState('');
-  const [dateError, setDateError] = useState('');
 
-  const duration = startDate && endDate ? diffDays(startDate, endDate) : 0;
-  const total = duration > 0 ? duration * item.prixParJour : 0;
-  const canReserve = startDate !== null && endDate !== null && duration > 0 && !dateError;
+  const summaryAnim = useRef(new Animated.Value(0)).current;
 
-  function openPicker(mode: 'start' | 'end') {
-    setPickerMode(mode);
-    setShowPicker(true);
+  useEffect(() => {
+    Animated.timing(summaryAnim, {
+      toValue: startDate && endDate ? 1 : 0,
+      duration: 280,
+      useNativeDriver: true,
+    }).start();
+  }, [startDate, endDate]);
+
+  // ── Calendar geometry ─────────────────────────────────────
+  // Card: marginH=20, paddingH=16 each side → available = screenWidth-72
+  const CELL_SIZE = Math.floor((screenWidth - 72) / 7);
+  const CIRCLE_SIZE = CELL_SIZE - 8;
+
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstOffset = getFirstDayOffset(year, month);
+
+  const cells: (number | null)[] = [
+    ...Array(firstOffset).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+
+  // ── Month navigation ──────────────────────────────────────
+  const firstThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const canGoPrev = currentMonth > firstThisMonth;
+
+  function prevMonth() {
+    setCurrentMonth(new Date(year, month - 1, 1));
+  }
+  function nextMonth() {
+    setCurrentMonth(new Date(year, month + 1, 1));
   }
 
-  function handleDateChange(_event: DateTimePickerEvent, selected?: Date) {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (!selected) return;
+  // ── Date selection logic ──────────────────────────────────
+  function handleDayPress(day: number) {
+    const pressed = startOfDay(new Date(year, month, day));
+    if (pressed < today) return;
 
-    const picked = new Date(selected);
-    picked.setHours(0, 0, 0, 0);
-
-    if (pickerMode === 'start') {
-      setStartDate(picked);
+    if (!startDate || (startDate && endDate)) {
+      // Fresh start
+      setStartDate(pressed);
       setEndDate(null);
-      if (picked < today) {
-        setDateError("La date de début doit être aujourd'hui ou plus tard.");
-      } else {
-        setDateError('');
-      }
     } else {
-      setEndDate(picked);
-      if (startDate && picked <= startDate) {
-        setDateError('La date de fin doit être après la date de début.');
+      // startDate set, endDate not yet
+      if (pressed <= startDate) {
+        setStartDate(pressed);
+        setEndDate(null);
       } else {
-        setDateError('');
+        setEndDate(pressed);
       }
     }
   }
 
+  // ── Derived values ────────────────────────────────────────
+  const duration = startDate && endDate ? diffDays(startDate, endDate) : 0;
+  const total = duration * item.prixParJour;
+  const canReserve = startDate !== null && endDate !== null && duration > 0;
+
   function handleConfirm() {
-    Alert.alert('Demande envoyée !', 'Le propriétaire a été notifié de votre demande.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+    Alert.alert(
+      'Demande envoyée !',
+      'Le propriétaire a été notifié de votre demande de réservation.',
+      [{ text: 'OK', onPress: () => navigation.goBack() }],
+    );
+  }
+
+  // ── Day cell renderer ─────────────────────────────────────
+  function renderDayCell(day: number | null, key: string) {
+    if (day === null) {
+      return <View key={key} style={{ width: CELL_SIZE, height: CELL_SIZE }} />;
+    }
+
+    const date = startOfDay(new Date(year, month, day));
+    const isPast = date < today;
+    const isToday = isSameDay(date, today);
+    const isStart = startDate ? isSameDay(date, startDate) : false;
+    const isEnd = endDate ? isSameDay(date, endDate) : false;
+    const inRange =
+      startDate && endDate ? date > startDate && date < endDate : false;
+
+    // Strip (range background)
+    let showStrip = false;
+    let stripLeft: number | string = 0;
+    let stripRight: number | string = 0;
+
+    if (isStart && endDate && !isEnd) {
+      showStrip = true;
+      stripLeft = '50%';
+      stripRight = 0;
+    } else if (isEnd && startDate && !isStart) {
+      showStrip = true;
+      stripLeft = 0;
+      stripRight = '50%';
+    } else if (inRange) {
+      showStrip = true;
+      stripLeft = 0;
+      stripRight = 0;
+    }
+
+    const stripInset = (CELL_SIZE - CIRCLE_SIZE) / 2;
+
+    // Text color
+    let textColor = Colors.textPrimary;
+    if (isPast) textColor = Colors.textTertiary;
+    else if (isStart || isEnd) textColor = Colors.textInverse;
+    else if (inRange) textColor = Colors.primary;
+
+    return (
+      <TouchableOpacity
+        key={key}
+        onPress={() => !isPast && handleDayPress(day)}
+        activeOpacity={isPast ? 1 : 0.75}
+        style={{ width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center', opacity: isPast ? 0.4 : 1 }}
+      >
+        {/* Range strip */}
+        {showStrip && (
+          <View
+            style={{
+              position: 'absolute',
+              top: stripInset,
+              bottom: stripInset,
+              left: stripLeft as number,
+              right: stripRight as number,
+              backgroundColor: Colors.primaryXLight,
+            }}
+          />
+        )}
+
+        {/* Circle (start / end) */}
+        <View
+          style={{
+            width: CIRCLE_SIZE,
+            height: CIRCLE_SIZE,
+            borderRadius: CIRCLE_SIZE / 2,
+            backgroundColor: isStart || isEnd ? Colors.primary : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: isStart || isEnd ? Typography.fontHeading : Typography.fontBody,
+              fontSize: 14,
+              color: textColor,
+            }}
+          >
+            {day}
+          </Text>
+        </View>
+
+        {/* Today dot */}
+        {isToday && !isStart && !isEnd && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 3,
+              width: 4,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: Colors.primary,
+            }}
+          />
+        )}
+      </TouchableOpacity>
+    );
   }
 
   const image = item.images?.[0];
-  const minEndDate = startDate
-    ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
-    : today;
 
   return (
     <KeyboardAvoidingView
@@ -103,12 +268,15 @@ export default function ReservationScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Réserver</Text>
-        <View style={styles.backBtn} />
+        <View style={{ alignItems: 'center', flex: 1 }}>
+          <Text style={styles.headerTitle}>Choisir les dates</Text>
+          <Text style={styles.headerSubtitle}>Appuyez sur deux dates pour sélectionner</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
-        contentContainerStyle={{ padding: Spacing.xl, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 140 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -119,161 +287,141 @@ export default function ReservationScreen() {
           ) : (
             <View style={[styles.itemImage, { backgroundColor: Colors.surfaceAlt }]} />
           )}
-          <View style={{ flex: 1, marginLeft: 14 }}>
+          <View style={{ flex: 1, marginLeft: Spacing.md }}>
             <Text style={styles.itemTitle} numberOfLines={1}>{item.titre}</Text>
-            <View style={styles.itemCityRow}>
-              <Ionicons name="location" size={12} color={Colors.textSecondary} />
-              <Text style={styles.itemCity}> {item.ville}</Text>
-            </View>
             <Text style={styles.itemPrice}>
-              {item.prixParJour} MAD{' '}
-              <Text style={styles.itemPriceUnit}>/jour</Text>
+              {item.prixParJour} MAD
+              <Text style={styles.itemPriceUnit}> /jour</Text>
             </Text>
           </View>
         </View>
 
-        {/* ── Dates ── */}
-        <Text style={styles.sectionTitle}>Dates de location</Text>
-        <View style={styles.dateRow}>
-          <TouchableOpacity
-            style={[styles.dateBtn, startDate ? styles.dateBtnActive : null]}
-            onPress={() => openPicker('start')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.dateBtnTop}>
-              <Text style={styles.dateBtnLabel}>Début</Text>
-              <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+        {/* ── Calendrier ── */}
+        <View style={styles.calendarCard}>
+          {/* Month nav */}
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              onPress={prevMonth}
+              disabled={!canGoPrev}
+              style={{ opacity: canGoPrev ? 1 : 0.25, padding: Spacing.xs }}
+            >
+              <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.monthTitle}>{MONTH_NAMES[month]} {year}</Text>
+            <TouchableOpacity onPress={nextMonth} style={{ padding: Spacing.xs }}>
+              <Ionicons name="chevron-forward" size={20} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Day labels */}
+          <View style={styles.dayLabelsRow}>
+            {DAY_LABELS.map((lbl) => (
+              <View key={lbl} style={{ width: CELL_SIZE, alignItems: 'center' }}>
+                <Text style={styles.dayLabel}>{lbl}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Grid */}
+          {rows.map((row, ri) => (
+            <View key={ri} style={{ flexDirection: 'row' }}>
+              {row.map((day, ci) => renderDayCell(day, `${ri}-${ci}`))}
             </View>
-            <Text style={[styles.dateBtnValue, !startDate && styles.dateBtnPlaceholder]}>
-              {startDate ? formatDate(startDate) : 'Choisir'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, endDate ? styles.dateBtnActive : null]}
-            onPress={() => openPicker('end')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.dateBtnTop}>
-              <Text style={styles.dateBtnLabel}>Fin</Text>
-              <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
-            </View>
-            <Text style={[styles.dateBtnValue, !endDate && styles.dateBtnPlaceholder]}>
-              {endDate ? formatDate(endDate) : 'Choisir'}
-            </Text>
-          </TouchableOpacity>
+          ))}
         </View>
 
-        {!!dateError && <Text style={styles.errorText}>{dateError}</Text>}
-
-        {showPicker && (
-          <DateTimePicker
-            value={
-              pickerMode === 'start'
-                ? (startDate ?? today)
-                : (endDate ?? minEndDate)
-            }
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            minimumDate={pickerMode === 'start' ? today : minEndDate}
-            onChange={handleDateChange}
-            accentColor={Colors.primary}
-          />
-        )}
-
-        {/* ── Résumé prix ── */}
-        <Text style={[styles.sectionTitle, { marginTop: Spacing['2xl'] }]}>Résumé</Text>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Prix par jour</Text>
-            <Text style={styles.summaryValue}>{item.prixParJour} MAD</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Durée</Text>
-            <Text style={styles.summaryValue}>
-              {duration > 0 ? `${duration} jour${duration > 1 ? 's' : ''}` : '—'}
+        {/* ── Summary card (animée) ── */}
+        <Animated.View
+          style={[
+            styles.summaryCard,
+            {
+              opacity: summaryAnim,
+              transform: [{
+                translateY: summaryAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+            },
+          ]}
+          pointerEvents={canReserve ? 'auto' : 'none'}
+        >
+          <View style={styles.summaryTopRow}>
+            <Ionicons name="calendar" size={15} color={Colors.primary} />
+            <Text style={styles.summaryDates}>
+              {startDate ? ` ${formatDisplay(startDate)}` : ''}{' '}→{' '}
+              {endDate ? formatDisplay(endDate) : ''}
+            </Text>
+            <Text style={styles.summaryNights}>
+              {'  '}•{'  '}{duration} nuit{duration > 1 ? 's' : ''}
             </Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, styles.totalLabel]}>Total</Text>
-            <Text style={styles.totalValue}>{total > 0 ? `${total} MAD` : '—'}</Text>
-          </View>
-        </View>
+          <Text style={styles.summaryCalc}>
+            {item.prixParJour} MAD × {duration} jour{duration > 1 ? 's' : ''} ={' '}
+            <Text style={styles.summaryTotal}>{total} MAD</Text>
+          </Text>
+        </Animated.View>
 
         {/* ── Message optionnel ── */}
-        <Text style={[styles.sectionTitle, { marginTop: Spacing['2xl'] }]}>
-          Message au propriétaire{' '}
-          <Text style={{ color: Colors.textTertiary, fontFamily: Typography.fontBody, fontSize: 13 }}>
-            (optionnel)
+        <View style={styles.messageSection}>
+          <Text style={styles.messageLabel}>
+            Message{'  '}
+            <Text style={{ color: Colors.textTertiary, fontFamily: Typography.fontBody }}>
+              (optionnel)
+            </Text>
           </Text>
-        </Text>
-        <TextInput
-          style={styles.messageInput}
-          placeholder="Présentez-vous et expliquez votre utilisation..."
-          placeholderTextColor={Colors.textTertiary}
-          multiline
-          value={message}
-          onChangeText={setMessage}
-          textAlignVertical="top"
-        />
+          <TextInput
+            style={styles.messageInput}
+            placeholder="Bonjour, je voudrais louer votre objet pour..."
+            placeholderTextColor={Colors.textTertiary}
+            multiline
+            value={message}
+            onChangeText={setMessage}
+            textAlignVertical="top"
+          />
+        </View>
       </ScrollView>
 
       {/* ── Bottom bar ── */}
-      <View style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: Spacing.xl,
-        paddingTop: 16,
-        paddingBottom: Platform.OS === 'android' ? 20 : insets.bottom + 12,
-        backgroundColor: Colors.surface,
-        borderTopWidth: 1,
-        borderTopColor: Colors.border,
-        elevation: 10,
-      }}>
-        <View>
-          <Text style={{ fontSize: 20, fontFamily: Typography.fontDisplay, color: Colors.primary }}>
-            {total > 0 ? `${total} MAD` : '—'}
-          </Text>
-          <Text style={{ fontSize: 12, color: Colors.textTertiary, fontFamily: Typography.fontBody }}>
-            total
-          </Text>
-        </View>
-        <TouchableOpacity
-          activeOpacity={canReserve ? 0.88 : 1}
-          disabled={!canReserve}
-          onPress={handleConfirm}
-          style={{
-            backgroundColor: Colors.primary,
-            borderRadius: Radius.full,
-            height: 52,
-            paddingHorizontal: 24,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: canReserve ? 1 : 0.5,
-          }}
-        >
-          <Text style={{ color: 'white', fontSize: 15, fontFamily: Typography.fontHeading }}>
-            Confirmer la réservation
-          </Text>
-        </TouchableOpacity>
+      <View
+        style={[
+          styles.bottomBar,
+          { paddingBottom: Platform.OS === 'android' ? 20 : insets.bottom + 12 },
+        ]}
+      >
+        {canReserve ? (
+          <>
+            <View>
+              <Text style={styles.bottomTotal}>{total} MAD total</Text>
+              <Text style={styles.bottomMeta}>
+                {duration} jour{duration > 1 ? 's' : ''} · {item.prixParJour} MAD/j
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              activeOpacity={0.88}
+              onPress={handleConfirm}
+            >
+              <Text style={styles.confirmBtnText}>Demander →</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.disabledBtn}>
+            <Text style={styles.disabledBtnText}>Sélectionnez vos dates</Text>
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  // ── Header ──
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     backgroundColor: Colors.surface,
@@ -294,41 +442,39 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: Colors.textPrimary,
   },
+  headerSubtitle: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
 
-  // ── Item card ──
+  // Item card
   itemCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing['2xl'],
+    backgroundColor: Colors.surface,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.lg,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
     ...Shadows.sm,
   },
   itemImage: {
-    width: 70,
-    height: 70,
+    width: 60,
+    height: 60,
     borderRadius: Radius.md,
   },
   itemTitle: {
     fontFamily: Typography.fontHeading,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.textPrimary,
     marginBottom: 4,
   },
-  itemCityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  itemCity: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontFamily: Typography.fontBody,
-  },
   itemPrice: {
     fontFamily: Typography.fontDisplay,
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.primary,
   },
   itemPriceUnit: {
@@ -337,107 +483,147 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
 
-  // ── Dates ──
-  sectionTitle: {
-    fontFamily: Typography.fontHeading,
-    fontSize: 17,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.md,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  dateBtn: {
-    flex: 1,
+  // Calendar
+  calendarCard: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dateBtnActive: {
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  dateBtnTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  dateBtnLabel: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    fontFamily: Typography.fontBody,
-  },
-  dateBtnValue: {
-    fontFamily: Typography.fontHeading,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  dateBtnPlaceholder: {
-    color: Colors.textTertiary,
-    fontFamily: Typography.fontBody,
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: 13,
-    fontFamily: Typography.fontBody,
-    marginBottom: Spacing.md,
-  },
-
-  // ── Summary card ──
-  summaryCard: {
-    backgroundColor: Colors.surface,
+    marginHorizontal: Spacing.xl,
     borderRadius: Radius.lg,
-    padding: Spacing.xl,
-    marginBottom: Spacing['2xl'],
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
     ...Shadows.sm,
   },
-  summaryRow: {
+  monthNav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
   },
-  summaryLabel: {
+  monthTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  dayLabelsRow: {
+    flexDirection: 'row',
+    marginBottom: Spacing.xs,
+  },
+  dayLabel: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+
+  // Summary
+  summaryCard: {
+    backgroundColor: Colors.primaryXLight,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  summaryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  summaryDates: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 14,
+    color: Colors.primary,
+  },
+  summaryNights: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  summaryCalc: {
     fontFamily: Typography.fontBody,
     fontSize: 14,
     color: Colors.textSecondary,
   },
-  summaryValue: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  totalLabel: {
-    fontFamily: Typography.fontHeading,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  totalValue: {
+  summaryTotal: {
     fontFamily: Typography.fontDisplay,
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.primary,
   },
 
-  // ── Message ──
+  // Message
+  messageSection: {
+    paddingHorizontal: Spacing.xl,
+  },
+  messageLabel: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
   messageInput: {
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
-    height: 100,
+    height: 90,
     fontFamily: Typography.fontBody,
     fontSize: 14,
     color: Colors.textPrimary,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: Spacing.xl,
+  },
+
+  // Bottom bar
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl,
+    paddingTop: 16,
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    elevation: 10,
+  },
+  bottomTotal: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: 20,
+    color: Colors.primary,
+  },
+  bottomMeta: {
+    fontFamily: Typography.fontBody,
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  confirmBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    height: 52,
+    paddingHorizontal: Spacing['4xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.button,
+  },
+  confirmBtnText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 16,
+    color: Colors.textInverse,
+  },
+  disabledBtn: {
+    flex: 1,
+    backgroundColor: Colors.border,
+    borderRadius: Radius.full,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledBtnText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 15,
+    color: Colors.textTertiary,
   },
 });
