@@ -3,6 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { HomeStackParamList } from './types';
 import HomeScreen from '../screens/home/HomeScreen';
 import ItemDetailScreen from '../screens/items/ItemDetailScreen';
+import ReservationScreen from '../screens/rentals/ReservationScreen';
 
 const Stack = createStackNavigator<HomeStackParamList>();
 
@@ -11,6 +12,7 @@ export default function HomeStackNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
+      <Stack.Screen name="Reservation" component={ReservationScreen} />
     </Stack.Navigator>
   );
 }

@@ -210,6 +210,7 @@ export default function ItemDetailScreen() {
         </View>
         <TouchableOpacity
           activeOpacity={0.88}
+          onPress={() => navigation.navigate('Reservation', { item })}
           style={{
             backgroundColor: Colors.primary,
             borderRadius: Radius.full,
