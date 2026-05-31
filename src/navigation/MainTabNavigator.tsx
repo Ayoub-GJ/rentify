@@ -8,6 +8,7 @@ import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
+import MesLocationsScreen from '../screens/rentals/MesLocationsScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -84,7 +85,7 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Locations"
-        component={Placeholder}
+        component={MesLocationsScreen}
         options={{
           tabBarLabel: 'Locations',
           tabBarIcon: ({ color, focused }) => (
