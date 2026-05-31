@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,50 +7,39 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
+import AddItemScreen from '../screens/items/AddItemScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const VISIBLE_TAB_BAR_STYLE = (bottomInset: number) => ({
-  backgroundColor: Colors.surface,
-  borderTopWidth: 0,
-  height: 60 + bottomInset,
-  paddingBottom: bottomInset,
-  elevation: 20,
-  shadowColor: '#1A1A2E',
-  shadowOffset: { width: 0, height: -4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 12,
-});
-
-const HIDDEN_TAB_BAR_STYLE = { display: 'none' } as const;
-
 const Placeholder = () => <View style={{ flex: 1, backgroundColor: Colors.background }} />;
-
-function AddButton({ onPress }: { onPress: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.addButton}>
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
+
+  const tabBarStyle = {
+    backgroundColor: Colors.surface,
+    borderTopWidth: 0,
+    height: 60 + insets.bottom,
+    paddingBottom: insets.bottom,
+    paddingTop: 8,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  };
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarStyle,
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textTertiary,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontFamily: 'Inter_400Regular',
-        },
-        tabBarIconStyle: {
-          marginTop: 4,
+          fontFamily: 'Inter_500Medium',
+          marginTop: 2,
         },
       }}
     >
@@ -59,15 +48,13 @@ export default function MainTabNavigator() {
         component={HomeStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Home';
+          const hideTabBar = focusedRoute === 'ItemDetail';
           return {
             tabBarLabel: 'Accueil',
-            tabBarIcon: ({ color, focused }) => (
+            tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
               <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
             ),
-            tabBarStyle:
-              focusedRoute === 'ItemDetail'
-                ? HIDDEN_TAB_BAR_STYLE
-                : VISIBLE_TAB_BAR_STYLE(insets.bottom),
+            ...(hideTabBar && { tabBarStyle: { display: 'none' } }),
           };
         }}
       />
@@ -76,7 +63,6 @@ export default function MainTabNavigator() {
         component={Placeholder}
         options={{
           tabBarLabel: 'Recherche',
-          tabBarStyle: VISIBLE_TAB_BAR_STYLE(insets.bottom),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
           ),
@@ -84,12 +70,15 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="AddItem"
-        component={Placeholder}
+        component={AddItemScreen}
         options={{
-          tabBarLabel: '',
-          tabBarStyle: VISIBLE_TAB_BAR_STYLE(insets.bottom),
-          tabBarButton: (props) => (
-            <AddButton onPress={() => props.onPress?.({} as any)} />
+          tabBarLabel: () => null,
+          tabBarShowLabel: false,
+          tabBarStyle: { display: 'none' },
+          tabBarIcon: () => (
+            <View style={styles.addButton}>
+              <Ionicons name="add" size={30} color="white" />
+            </View>
           ),
         }}
       />
@@ -98,7 +87,6 @@ export default function MainTabNavigator() {
         component={Placeholder}
         options={{
           tabBarLabel: 'Locations',
-          tabBarStyle: VISIBLE_TAB_BAR_STYLE(insets.bottom),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
           ),
@@ -109,7 +97,6 @@ export default function MainTabNavigator() {
         component={Placeholder}
         options={{
           tabBarLabel: 'Profil',
-          tabBarStyle: VISIBLE_TAB_BAR_STYLE(insets.bottom),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),
@@ -121,17 +108,17 @@ export default function MainTabNavigator() {
 
 const styles = StyleSheet.create({
   addButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 24,
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
 });
