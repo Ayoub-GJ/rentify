@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -183,7 +184,7 @@ export default function ItemDetailScreen() {
       </ScrollView>
 
       {/* ── Bottom bar ── */}
-      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'android' ? 16 : Math.max(insets.bottom, 16) }]}>
         <View style={styles.bottomPriceBlock}>
           <Text style={styles.bottomPrice}>
             {item.prixParJour} MAD
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     elevation: 10,
