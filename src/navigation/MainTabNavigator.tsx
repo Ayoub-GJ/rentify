@@ -9,6 +9,7 @@ import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
 import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
+import ProfileScreen from '../screens/profile/ProfileScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -100,10 +101,10 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Profile"
-        component={Placeholder}
+        component={ProfileScreen}
         options={{
           tabBarLabel: 'Profil',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),
         }}
