@@ -26,8 +26,6 @@ import {
 import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
 import { HomeStackParamList } from '../../navigation/types';
 
-// TODO: Ajouter badge vérifié sur profil (Phase 4)
-
 type HomeNavProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
@@ -140,7 +138,7 @@ export default function HomeScreen() {
       <View style={styles.searchRow}>
         <TouchableOpacity
           style={styles.searchBar}
-          onPress={() => navigation.navigate('Search', {})}
+          onPress={() => (navigation as any).navigate('Recherche', { screen: 'SearchScreen' })}
           activeOpacity={0.8}
         >
           <Ionicons name="search-outline" size={20} color={Colors.textTertiary} style={styles.searchIcon} />
@@ -149,7 +147,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.filterButton}
           activeOpacity={0.85}
-          onPress={() => navigation.navigate('Search', { openFilters: true })}
+          onPress={() => (navigation as any).navigate('Recherche', { screen: 'SearchScreen', params: { openFilters: true } })}
         >
           <Ionicons name="options-outline" size={22} color={Colors.textInverse} />
         </TouchableOpacity>

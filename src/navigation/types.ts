@@ -10,7 +10,12 @@ export type HomeStackParamList = {
   Home: undefined;
   ItemDetail: { item: MockItem };
   Reservation: { item: MockItem };
-  Search: { openFilters?: boolean };
+};
+
+export type SearchStackParamList = {
+  SearchScreen: { openFilters?: boolean };
+  ItemDetail: { item: MockItem };
+  Reservation: { item: MockItem };
 };
 
 export type LocationsStackParamList = {
@@ -20,7 +25,7 @@ export type LocationsStackParamList = {
 
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
-  Search: undefined;
+  Recherche: NavigatorScreenParams<SearchStackParamList>;
   AddItem: undefined;
   Locations: NavigatorScreenParams<LocationsStackParamList>;
   Profile: undefined;

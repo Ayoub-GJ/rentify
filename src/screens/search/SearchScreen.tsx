@@ -14,8 +14,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import Slider from '@react-native-community/slider';
 import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
+import { SearchStackParamList } from '../../navigation/types';
 import {
   Colors,
   Typography,
@@ -25,6 +27,8 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
+
+type SearchNavProp = StackNavigationProp<SearchStackParamList, 'SearchScreen'>;
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -56,9 +60,9 @@ const CATEGORY_CHIPS = [ALL_CHIP, ...Categories] as const;
 
 // ─── ItemRow ──────────────────────────────────────────────────
 
-function ItemRow({ item }: { item: MockItem }) {
+function ItemRow({ item, onPress }: { item: MockItem; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.itemRow} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.itemRow} activeOpacity={0.7} onPress={onPress}>
       <Image source={{ uri: item.images[0] }} style={styles.itemImage} resizeMode="cover" />
       <View style={styles.itemContent}>
         <Text style={styles.itemTitle} numberOfLines={1}>{item.titre}</Text>
@@ -83,7 +87,7 @@ function ItemRow({ item }: { item: MockItem }) {
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<SearchNavProp>();
   const route = useRoute<any>();
   const inputRef = useRef<TextInput>(null);
 
@@ -159,7 +163,12 @@ export default function SearchScreen() {
     setPendingFilters(DEFAULT_FILTERS);
   }
 
-  const renderItem = useCallback(({ item }: { item: MockItem }) => <ItemRow item={item} />, []);
+  const renderItem = useCallback(
+    ({ item }: { item: MockItem }) => (
+      <ItemRow item={item} onPress={() => navigation.navigate('ItemDetail', { item })} />
+    ),
+    [navigation],
+  );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -248,18 +257,30 @@ export default function SearchScreen() {
         data={filteredItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucun objet trouvé</Text>
+            <Ionicons name="search-outline" size={64} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>Aucun objet trouvé</Text>
+            <Text style={styles.emptySubtitle}>Essayez d'autres filtres</Text>
+            <TouchableOpacity
+              style={styles.emptyResetBtn}
+              onPress={() => {
+                setFilters(DEFAULT_FILTERS);
+                setActiveCategory('tout');
+                setSearch('');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyResetText}>Réinitialiser les filtres</Text>
+            </TouchableOpacity>
           </View>
         }
       />
 
       {/* Floating map button */}
-      <View style={[styles.mapBtnWrap, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
+      <View style={styles.mapBtnWrap} pointerEvents="box-none">
         <TouchableOpacity
           style={styles.mapBtn}
           activeOpacity={0.85}
@@ -455,8 +476,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.md,
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
   },
   statsCount: {
     fontFamily: Typography.fontBody,
@@ -491,8 +513,9 @@ const styles = StyleSheet.create({
 
   // Results list
   listContent: {
-    paddingHorizontal: Layout.screenPadding,
-    gap: Spacing.md,
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+    gap: 12,
   },
 
   // Item row card
@@ -560,18 +583,38 @@ const styles = StyleSheet.create({
     paddingTop: Spacing['6xl'],
     gap: Spacing.lg,
   },
-  emptyText: {
+  emptyTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 18,
+    color: Colors.textPrimary,
+  },
+  emptySubtitle: {
     fontFamily: Typography.fontBody,
-    fontSize: Typography.size.md,
-    color: Colors.textTertiary,
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  emptyResetBtn: {
+    marginTop: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing.md,
+  },
+  emptyResetText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.primary,
   },
 
   // Floating map button
   mapBtnWrap: {
     position: 'absolute',
+    bottom: 20,
     left: 0,
     right: 0,
     alignItems: 'center',
+    zIndex: 10,
   },
   mapBtn: {
     flexDirection: 'row',
@@ -581,7 +624,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     paddingVertical: 14,
     paddingHorizontal: Spacing['2xl'],
-    ...Shadows.lg,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   mapBtnText: {
     fontFamily: Typography.fontSubheading,

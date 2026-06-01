@@ -7,9 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
+import SearchStackNavigator from './SearchStackNavigator';
 import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
-import SearchScreen from '../screens/search/SearchScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -60,13 +60,18 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{
-          tabBarLabel: 'Recherche',
-          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
-          ),
+        name="Recherche"
+        component={SearchStackNavigator}
+        options={({ route }) => {
+          const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'SearchScreen';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation';
+          return {
+            tabBarLabel: 'Recherche',
+            tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+              <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
+            ),
+            ...(hideTabBar && { tabBarStyle: { display: 'none' } }),
+          };
         }}
       />
       <Tab.Screen
