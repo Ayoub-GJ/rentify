@@ -161,6 +161,7 @@ export default function HomeScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={{ overflow: 'visible' }}
         contentContainerStyle={styles.chipsContainer}
       >
         {CHIPS.map((cat) => {
@@ -310,6 +311,7 @@ const styles = StyleSheet.create({
   },
   chipsContainer: {
     paddingHorizontal: Layout.screenPadding - Spacing.xs,
+    paddingVertical: 4,
     paddingBottom: Spacing.lg,
     gap: Spacing.sm,
     flexDirection: 'row',
@@ -317,6 +319,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     height: 40,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.lg - Spacing.xs,
@@ -327,7 +330,7 @@ const styles = StyleSheet.create({
   },
   chipInactive: {
     backgroundColor: Colors.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.border,
   },
   chipLabel: {
