@@ -15,8 +15,10 @@ import {
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import AppNavigator from './src/navigation/AppNavigator';
+// import { seedItems } from './src/utils/seedFirestore';
 
 SplashScreen.preventAutoHideAsync();
+// seedItems(); // ← décommente une seule fois pour peupler Firestore, puis recommente
 
 export default function App() {
   const [fontsLoaded] = useFonts({
