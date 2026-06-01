@@ -4,6 +4,7 @@ import { HomeStackParamList } from './types';
 import HomeScreen from '../screens/home/HomeScreen';
 import ItemDetailScreen from '../screens/items/ItemDetailScreen';
 import ReservationScreen from '../screens/rentals/ReservationScreen';
+import SearchScreen from '../screens/search/SearchScreen';
 
 const Stack = createStackNavigator<HomeStackParamList>();
 
@@ -13,6 +14,7 @@ export default function HomeStackNavigator() {
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
       <Stack.Screen name="Reservation" component={ReservationScreen} />
+      <Stack.Screen name="Search" component={SearchScreen} />
     </Stack.Navigator>
   );
 }

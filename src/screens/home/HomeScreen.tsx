@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   FlatList,
   ScrollView,
@@ -24,7 +23,7 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
-import { MOCK_ITEMS, MockItem } from '../../data/items';
+import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
 import { HomeStackParamList } from '../../navigation/types';
 
 // TODO: Ajouter badge vérifié sur profil (Phase 4)
@@ -94,24 +93,15 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<HomeNavProp>();
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('tout');
 
   const firebaseUser = getCurrentUser();
   const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'Ayoub';
 
   const filteredItems = useMemo(() => {
-    const byCategory =
-      activeCategory === 'tout'
-        ? MOCK_ITEMS
-        : MOCK_ITEMS.filter((i) => i.categorie === activeCategory);
-
-    if (!searchQuery.trim()) return byCategory;
-    const q = searchQuery.toLowerCase();
-    return byCategory.filter(
-      (i) => i.titre.toLowerCase().includes(q) || i.categorie.toLowerCase().includes(q),
-    );
-  }, [activeCategory, searchQuery]);
+    if (activeCategory === 'tout') return MOCK_ITEMS;
+    return MOCK_ITEMS.filter((i) => i.categorie === activeCategory);
+  }, [activeCategory]);
 
   const cardWidth = useMemo(() => {
     const totalPadding = Layout.screenPadding * 2;
@@ -148,20 +138,19 @@ export default function HomeScreen() {
 
       {/* ── Barre de recherche ── */}
       <View style={styles.searchRow}>
-        <View style={styles.searchBar}>
+        <TouchableOpacity
+          style={styles.searchBar}
+          onPress={() => navigation.navigate('Search', {})}
+          activeOpacity={0.8}
+        >
           <Ionicons name="search-outline" size={20} color={Colors.textTertiary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Rechercher un objet..."
-            placeholderTextColor={Colors.textTertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton} activeOpacity={0.85}>
+          <Text style={styles.searchPlaceholder}>Rechercher un objet...</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.filterButton}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('Search', { openFilters: true })}
+        >
           <Ionicons name="options-outline" size={22} color={Colors.textInverse} />
         </TouchableOpacity>
       </View>
@@ -299,12 +288,11 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: Spacing.sm,
   },
-  searchInput: {
+  searchPlaceholder: {
     flex: 1,
     fontFamily: Typography.fontBody,
     fontSize: Typography.size.md,
-    color: Colors.textPrimary,
-    padding: 0,
+    color: Colors.textTertiary,
   },
   filterButton: {
     width: Layout.inputHeight,

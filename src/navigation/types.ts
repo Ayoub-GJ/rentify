@@ -1,5 +1,5 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
-import type { MockItem } from '../data/items';
+import type { MockItem } from '../data/mockItems';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -10,6 +10,7 @@ export type HomeStackParamList = {
   Home: undefined;
   ItemDetail: { item: MockItem };
   Reservation: { item: MockItem };
+  Search: { openFilters?: boolean };
 };
 
 export type LocationsStackParamList = {

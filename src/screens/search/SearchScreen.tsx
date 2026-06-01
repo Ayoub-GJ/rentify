@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,14 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  useWindowDimensions,
+  Modal,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Slider from '@react-native-community/slider';
+import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
 import {
   Colors,
   Typography,
@@ -21,73 +25,56 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
-import { MOCK_ITEMS, MockItem } from '../../data/items';
 
 // ─── Types ────────────────────────────────────────────────────
 
-type QuickFilter = 'tout' | 'disponible' | 'moins50' | 'pres';
+type SortOption = 'proximite' | 'prix' | 'note';
 
-interface QuickFilterChip {
-  id: QuickFilter;
-  label: string;
+interface Filters {
+  prixMax: number;
+  distanceMax: number;
+  noteMin: number;
 }
 
-const QUICK_FILTERS: QuickFilterChip[] = [
-  { id: 'tout', label: 'Tout' },
-  { id: 'disponible', label: 'Disponible' },
-  { id: 'moins50', label: '< 50 MAD' },
-  { id: 'pres', label: 'Près de moi' },
+const NOTE_CHIPS: { label: string; value: number }[] = [
+  { label: '★ 3+', value: 3 },
+  { label: '★ 4+', value: 4 },
+  { label: '★ 4.5+', value: 4.5 },
+  { label: '★ 4.8+', value: 4.8 },
 ];
 
-// ─── ItemCard ─────────────────────────────────────────────────
+const SORT_OPTIONS: { id: SortOption; label: string }[] = [
+  { id: 'proximite', label: 'À proximité' },
+  { id: 'prix', label: 'Prix' },
+  { id: 'note', label: 'Note' },
+];
 
-function ItemCard({ item, cardWidth }: { item: MockItem; cardWidth: number }) {
+const DEFAULT_FILTERS: Filters = { prixMax: 200, distanceMax: 3, noteMin: 4 };
+
+const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
+const CATEGORY_CHIPS = [ALL_CHIP, ...Categories] as const;
+
+// ─── ItemRow ──────────────────────────────────────────────────
+
+function ItemRow({ item }: { item: MockItem }) {
   return (
-    <TouchableOpacity style={[styles.card, { width: cardWidth }]} activeOpacity={0.88}>
-      <View style={styles.imageContainer}>
-        <Image source={{ uri: item.images[0] }} style={styles.cardImage} resizeMode="cover" />
-        <TouchableOpacity style={styles.heartButton} activeOpacity={0.8}>
-          <Ionicons name="heart-outline" size={16} color={Colors.textTertiary} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.titre}</Text>
-        <View style={styles.cardRow}>
-          <Ionicons name="location" size={11} color={Colors.primary} />
-          <Text style={styles.cardLocationText}>{item.ville}</Text>
+    <TouchableOpacity style={styles.itemRow} activeOpacity={0.8}>
+      <Image source={{ uri: item.images[0] }} style={styles.itemImage} resizeMode="cover" />
+      <View style={styles.itemContent}>
+        <Text style={styles.itemTitle} numberOfLines={1}>{item.titre}</Text>
+        <View style={styles.itemMeta}>
+          <Ionicons name="location" size={12} color={Colors.textSecondary} />
+          <Text style={styles.itemMetaText}>{item.distance} km</Text>
+          <Ionicons name="star" size={12} color="#F0A020" style={styles.itemMetaStar} />
+          <Text style={styles.itemMetaText}>{item.note} ({item.avis})</Text>
         </View>
-        <View style={styles.cardRow}>
-          <Ionicons name="star" size={12} color="#F0A020" />
-          <Text style={styles.cardRatingNote}>{item.note}</Text>
-          <Text style={styles.cardRatingAvis}>({item.avis} avis)</Text>
+        <Text style={styles.itemOwner}>par {item.proprietaire.nom}</Text>
+        <View style={styles.itemPriceRow}>
+          <Text style={styles.itemPrice}>{item.prixParJour} MAD</Text>
+          <Text style={styles.itemPriceUnit}>/j</Text>
         </View>
-        <Text style={styles.cardPrice}>
-          {item.prixParJour} MAD<Text style={styles.cardPriceUnit}> /jour</Text>
-        </Text>
       </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── CategoryCard ─────────────────────────────────────────────
-
-function CategoryCard({
-  cat,
-  cardWidth,
-  onPress,
-}: {
-  cat: (typeof Categories)[number];
-  cardWidth: number;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.catCard, { width: cardWidth }]}
-      activeOpacity={0.8}
-      onPress={onPress}
-    >
-      <Ionicons name={cat.icon as any} size={32} color={cat.color} />
-      <Text style={styles.catLabel}>{cat.label}</Text>
+      <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
     </TouchableOpacity>
   );
 }
@@ -95,171 +82,284 @@ function CategoryCard({
 // ─── Screen ───────────────────────────────────────────────────
 
 export default function SearchScreen() {
-  const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const inputRef = useRef<TextInput>(null);
 
-  const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('tout');
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const canGoBack = navigation.canGoBack();
+  const openFiltersParam: boolean = route?.params?.openFilters ?? false;
 
-  const isSearching = query.trim().length > 0 || activeCategory !== null || quickFilter !== 'tout';
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('tout');
+  const [activeSort, setActiveSort] = useState<SortOption>('proximite');
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [pendingFilters, setPendingFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    if (openFiltersParam) setShowFilters(true);
+  }, [openFiltersParam]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const filteredItems = useMemo(() => {
-    let items = MOCK_ITEMS;
-
-    if (activeCategory) {
+    let items = [...MOCK_ITEMS];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter((i) => i.titre.toLowerCase().includes(q));
+    }
+    if (activeCategory !== 'tout') {
       items = items.filter((i) => i.categorie === activeCategory);
     }
-
-    if (quickFilter === 'disponible') items = items.filter((i) => i.disponible);
-    if (quickFilter === 'moins50') items = items.filter((i) => i.prixParJour < 50);
-
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      items = items.filter(
-        (i) =>
-          i.titre.toLowerCase().includes(q) ||
-          i.categorie.toLowerCase().includes(q) ||
-          i.ville.toLowerCase().includes(q),
-      );
-    }
-
+    items = items.filter(
+      (i) =>
+        i.prixParJour <= filters.prixMax &&
+        i.distance <= filters.distanceMax &&
+        i.note >= filters.noteMin,
+    );
+    if (activeSort === 'prix') items.sort((a, b) => a.prixParJour - b.prixParJour);
+    if (activeSort === 'note') items.sort((a, b) => b.note - a.note);
+    if (activeSort === 'proximite') items.sort((a, b) => a.distance - b.distance);
     return items;
-  }, [query, quickFilter, activeCategory]);
+  }, [search, activeCategory, activeSort, filters]);
 
-  const cardWidth = useMemo(() => {
-    const totalPadding = Layout.screenPadding * 2;
-    return (screenWidth - totalPadding - Layout.cardGap) / 2;
-  }, [screenWidth]);
+  // Count results with pending filters (for modal button)
+  const pendingCount = useMemo(() => {
+    let items = [...MOCK_ITEMS];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter((i) => i.titre.toLowerCase().includes(q));
+    }
+    if (activeCategory !== 'tout') {
+      items = items.filter((i) => i.categorie === activeCategory);
+    }
+    return items.filter(
+      (i) =>
+        i.prixParJour <= pendingFilters.prixMax &&
+        i.distance <= pendingFilters.distanceMax &&
+        i.note >= pendingFilters.noteMin,
+    ).length;
+  }, [search, activeCategory, pendingFilters]);
 
-  const catCardWidth = useMemo(() => {
-    const totalPadding = Layout.screenPadding * 2;
-    return (screenWidth - totalPadding - Spacing.md) / 2;
-  }, [screenWidth]);
-
-  function handleCategoryPress(catId: string) {
-    setActiveCategory(catId);
+  function openModal() {
+    setPendingFilters(filters);
+    setShowFilters(true);
   }
 
-  function handleCancel() {
-    setQuery('');
-    setFocused(false);
-    setActiveCategory(null);
-    setQuickFilter('tout');
-    inputRef.current?.blur();
+  function applyFilters() {
+    setFilters(pendingFilters);
+    setShowFilters(false);
   }
 
-  const renderItem = useCallback(
-    ({ item }: { item: MockItem }) => <ItemCard item={item} cardWidth={cardWidth} />,
-    [cardWidth],
-  );
+  function resetFilters() {
+    setPendingFilters(DEFAULT_FILTERS);
+  }
+
+  const renderItem = useCallback(({ item }: { item: MockItem }) => <ItemRow item={item} />, []);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Recherche</Text>
-        <Text style={styles.subtitle}>Trouvez l'objet parfait</Text>
-      </View>
-
-      {/* Search bar */}
-      <View style={styles.searchRow}>
-        <View style={[styles.searchBar, focused && styles.searchBarFocused]}>
+        {canGoBack && (
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+        )}
+        <View style={[styles.searchBar, !canGoBack && styles.searchBarFull]}>
           <Ionicons name="search-outline" size={20} color={Colors.textTertiary} style={styles.searchIcon} />
           <TextInput
             ref={inputRef}
             style={styles.searchInput}
             placeholder="Rechercher un objet..."
             placeholderTextColor={Colors.textTertiary}
-            value={query}
-            onChangeText={setQuery}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            value={search}
+            onChangeText={setSearch}
             autoFocus={false}
             returnKeyType="search"
             autoCapitalize="none"
             autoCorrect={false}
           />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
               <Ionicons name="close-circle" size={18} color={Colors.textTertiary} />
             </TouchableOpacity>
           )}
         </View>
-        {focused && (
-          <TouchableOpacity onPress={handleCancel} style={styles.cancelBtn} activeOpacity={0.7}>
-            <Text style={styles.cancelText}>Annuler</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.filterBtn} onPress={openModal} activeOpacity={0.85}>
+          <Ionicons name="options-outline" size={22} color={Colors.textInverse} />
+        </TouchableOpacity>
       </View>
 
-      {/* Quick filter chips */}
+      {/* Category chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chips}
+        contentContainerStyle={styles.chipsContainer}
       >
-        {QUICK_FILTERS.map((f) => {
-          const active = quickFilter === f.id;
+        {CATEGORY_CHIPS.map((cat) => {
+          const active = activeCategory === cat.id;
           return (
             <TouchableOpacity
-              key={f.id}
+              key={cat.id}
               style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
-              onPress={() => setQuickFilter(f.id)}
+              onPress={() => setActiveCategory(cat.id)}
               activeOpacity={0.8}
             >
+              <Ionicons name={cat.icon as any} size={15} color={active ? Colors.textInverse : cat.color} />
               <Text style={[styles.chipLabel, active ? styles.chipLabelActive : styles.chipLabelInactive]}>
-                {f.label}
+                {cat.label}
               </Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* Content */}
-      {isSearching ? (
-        <FlatList
-          data={filteredItems}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <Text style={styles.resultCount}>
-              {filteredItems.length} résultat{filteredItems.length !== 1 ? 's' : ''}
-            </Text>
+      {/* Stats + Sort row */}
+      <View style={styles.statsRow}>
+        <Text style={styles.statsCount}>
+          <Text style={styles.statsCountNum}>{filteredItems.length}</Text> objets disponibles
+        </Text>
+        <View style={styles.sortChips}>
+          {SORT_OPTIONS.map((s) => {
+            const active = activeSort === s.id;
+            return (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.sortChip, active && styles.sortChipActive]}
+                onPress={() => setActiveSort(s.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.sortChipLabel, active && styles.sortChipLabelActive]}>
+                  {s.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Results */}
+      <FlatList
+        data={filteredItems}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
+            <Text style={styles.emptyText}>Aucun objet trouvé</Text>
+          </View>
+        }
+      />
+
+      {/* Floating map button */}
+      <View style={[styles.mapBtnWrap, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.mapBtn}
+          activeOpacity={0.85}
+          onPress={() =>
+            Alert.alert('Bientôt disponible', 'La vue carte sera disponible prochainement.', [{ text: 'OK' }])
           }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
-              <Text style={styles.emptyText}>Aucun objet trouvé</Text>
+        >
+          <Ionicons name="map-outline" size={18} color={Colors.textInverse} />
+          <Text style={styles.mapBtnText}>Carte</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Modal */}
+      <Modal visible={showFilters} transparent animationType="slide" statusBarTranslucent>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBg} onPress={() => setShowFilters(false)} activeOpacity={1} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            {/* Drag handle */}
+            <View style={styles.dragHandle} />
+
+            {/* Title row */}
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Filtres</Text>
+              <TouchableOpacity onPress={() => setShowFilters(false)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
             </View>
-          }
-        />
-      ) : (
-        <FlatList
-          data={Categories as unknown as (typeof Categories)[number][]}
-          keyExtractor={(cat) => cat.id}
-          renderItem={({ item: cat }) => (
-            <CategoryCard
-              cat={cat}
-              cardWidth={catCardWidth}
-              onPress={() => handleCategoryPress(cat.id)}
-            />
-          )}
-          numColumns={2}
-          columnWrapperStyle={styles.catColumnWrapper}
-          contentContainerStyle={styles.catListContent}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <Text style={styles.sectionTitle}>Catégories</Text>
-          }
-        />
-      )}
+
+            {/* Prix max */}
+            <View style={styles.filterSection}>
+              <View style={styles.filterLabelRow}>
+                <Text style={styles.filterLabel}>Prix max</Text>
+                <Text style={styles.filterValue}>{pendingFilters.prixMax} MAD/j</Text>
+              </View>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={500}
+                step={10}
+                value={pendingFilters.prixMax}
+                onValueChange={(v) => setPendingFilters((prev) => ({ ...prev, prixMax: v }))}
+                minimumTrackTintColor={Colors.primary}
+                maximumTrackTintColor={Colors.border}
+                thumbTintColor={Colors.primary}
+              />
+            </View>
+
+            {/* Distance max */}
+            <View style={styles.filterSection}>
+              <View style={styles.filterLabelRow}>
+                <Text style={styles.filterLabel}>Distance max</Text>
+                <Text style={styles.filterValue}>{pendingFilters.distanceMax} km</Text>
+              </View>
+              <Slider
+                style={styles.slider}
+                minimumValue={1}
+                maximumValue={20}
+                step={1}
+                value={pendingFilters.distanceMax}
+                onValueChange={(v) => setPendingFilters((prev) => ({ ...prev, distanceMax: v }))}
+                minimumTrackTintColor={Colors.primary}
+                maximumTrackTintColor={Colors.border}
+                thumbTintColor={Colors.primary}
+              />
+            </View>
+
+            {/* Note minimale */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Note minimale</Text>
+              <View style={styles.noteChips}>
+                {NOTE_CHIPS.map((n) => {
+                  const active = pendingFilters.noteMin === n.value;
+                  return (
+                    <TouchableOpacity
+                      key={n.value}
+                      style={[styles.noteChip, active && styles.noteChipActive]}
+                      onPress={() => setPendingFilters((prev) => ({ ...prev, noteMin: n.value }))}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.noteChipLabel, active && styles.noteChipLabelActive]}>
+                        {n.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Buttons */}
+            <View style={styles.sheetButtons}>
+              <TouchableOpacity style={styles.resetBtn} onPress={resetFilters} activeOpacity={0.8}>
+                <Text style={styles.resetBtnText}>Réinitialiser</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.applyBtn} onPress={applyFilters} activeOpacity={0.85}>
+                <Text style={styles.applyBtnText}>Voir {pendingCount} résultats</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -274,29 +374,21 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
-  },
-  title: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: 22,
-    color: Colors.textPrimary,
-  },
-  subtitle: {
-    fontFamily: Typography.fontBody,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-
-  // Search bar
-  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  backBtn: {
+    width: 44,
+    height: 52,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
   },
   searchBar: {
     flex: 1,
@@ -305,13 +397,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: Colors.primary,
     ...Shadows.sm,
   },
-  searchBarFocused: {
-    borderColor: Colors.primary,
+  searchBarFull: {
+    marginLeft: 0,
   },
   searchIcon: {
     marginRight: Spacing.sm,
@@ -323,135 +415,148 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     padding: 0,
   },
-  cancelBtn: {
-    paddingVertical: Spacing.sm,
-  },
-  cancelText: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 15,
-    color: Colors.primary,
+  filterBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.button,
   },
 
-  // Quick filters
-  chips: {
+  // Category chips
+  chipsContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.lg,
+    paddingBottom: Spacing.md,
     gap: Spacing.sm,
     flexDirection: 'row',
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 36,
     borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+    gap: 5,
   },
-  chipActive: {
-    backgroundColor: Colors.primary,
-  },
+  chipActive: { backgroundColor: Colors.primary },
   chipInactive: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  chipLabel: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: Typography.size.sm,
-  },
-  chipLabelActive: {
-    color: Colors.textInverse,
-  },
-  chipLabelInactive: {
-    color: Colors.textSecondary,
-  },
+  chipLabel: { fontFamily: Typography.fontBodyMedium, fontSize: 13 },
+  chipLabelActive: { color: Colors.textInverse },
+  chipLabelInactive: { color: Colors.textSecondary },
 
-  // Results list
-  resultCount: {
-    fontFamily: Typography.fontBody,
-    fontSize: 13,
-    color: Colors.textSecondary,
+  // Stats + Sort
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.md,
   },
-  columnWrapper: {
-    paddingHorizontal: Layout.screenPadding,
-    gap: Layout.cardGap,
-    marginBottom: Layout.cardGap,
+  statsCount: {
+    fontFamily: Typography.fontBody,
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
-  listContent: {
-    paddingBottom: Spacing['4xl'],
-  },
-
-  // Item card
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    ...Shadows.card,
-  },
-  imageContainer: {
-    position: 'relative',
-  },
-  cardImage: {
-    width: '100%',
-    height: 130,
-  },
-  heartButton: {
-    position: 'absolute',
-    top: Spacing.sm,
-    right: Spacing.sm,
-    width: 30,
-    height: 30,
-    borderRadius: Radius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.80)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardBody: {
-    padding: Spacing.md,
-    gap: Spacing.xs,
-  },
-  cardTitle: {
-    fontFamily: Typography.fontSubheading,
-    fontSize: Typography.size.sm + 1,
+  statsCountNum: {
+    fontFamily: Typography.fontHeading,
     color: Colors.textPrimary,
   },
-  cardRow: {
+  sortChips: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  sortChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  sortChipActive: {
+    backgroundColor: Colors.primaryXLight,
+  },
+  sortChipLabel: {
+    fontFamily: Typography.fontBody,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  sortChipLabelActive: {
+    fontFamily: Typography.fontBodyMedium,
+    color: Colors.primary,
+  },
+
+  // Results list
+  listContent: {
+    paddingHorizontal: Layout.screenPadding,
+    gap: Spacing.md,
+  },
+
+  // Item row card
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    ...Shadows.card,
+  },
+  itemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: Radius.md,
+  },
+  itemContent: {
+    flex: 1,
+    gap: 3,
+  },
+  itemTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  itemMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
   },
-  cardLocationText: {
+  itemMetaText: {
     fontFamily: Typography.fontBody,
-    fontSize: Typography.size.xs,
+    fontSize: 13,
     color: Colors.textSecondary,
   },
-  cardRatingNote: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 12,
-    color: Colors.textPrimary,
+  itemMetaStar: {
+    marginLeft: Spacing.sm,
   },
-  cardRatingAvis: {
+  itemOwner: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  itemPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+    marginTop: 2,
+  },
+  itemPrice: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: 16,
+    color: Colors.primary,
+  },
+  itemPriceUnit: {
     fontFamily: Typography.fontBody,
     fontSize: 11,
-    color: Colors.textTertiary,
-  },
-  cardPrice: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: Typography.size.md,
-    color: Colors.primary,
-    marginTop: Spacing.xs,
-  },
-  cardPriceUnit: {
-    fontFamily: Typography.fontBody,
-    fontSize: Typography.size.xs,
     color: Colors.textTertiary,
   },
 
   // Empty state
   emptyState: {
     alignItems: 'center',
-    justifyContent: 'center',
     paddingTop: Spacing['6xl'],
     gap: Spacing.lg,
   },
@@ -461,34 +566,149 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
 
-  // Categories grid
-  sectionTitle: {
-    fontFamily: Typography.fontHeading,
-    fontSize: Typography.size.lg,
-    color: Colors.textPrimary,
-    paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.md,
+  // Floating map button
+  mapBtnWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
-  catColumnWrapper: {
-    paddingHorizontal: Layout.screenPadding,
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.textPrimary,
+    borderRadius: Radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing['2xl'],
+    ...Shadows.lg,
   },
-  catListContent: {
-    paddingBottom: Spacing['4xl'],
+  mapBtnText: {
+    fontFamily: Typography.fontSubheading,
+    fontSize: 15,
+    color: Colors.textInverse,
   },
-  catCard: {
-    height: 100,
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.overlay,
+  },
+  sheet: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing['2xl'],
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: Colors.borderStrong,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: Spacing.lg,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  sheetTitle: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: 22,
+    color: Colors.textPrimary,
+  },
+
+  // Filter sections
+  filterSection: {
+    marginBottom: Spacing.xl,
+  },
+  filterLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  filterLabel: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textPrimary,
+  },
+  filterValue: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.primary,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+    marginTop: 4,
+  },
+  noteChips: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  noteChip: {
+    flex: 1,
+    height: 40,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    ...Shadows.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
   },
-  catLabel: {
-    fontFamily: Typography.fontSubheading,
-    fontSize: 14,
-    color: Colors.textPrimary,
+  noteChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  noteChipLabel: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  noteChipLabelActive: {
+    color: Colors.textInverse,
+  },
+
+  // Sheet buttons
+  sheetButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  resetBtn: {
+    flex: 4,
+    height: 52,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetBtnText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textSecondary,
+  },
+  applyBtn: {
+    flex: 6,
+    height: 52,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.button,
+  },
+  applyBtnText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textInverse,
   },
 });
