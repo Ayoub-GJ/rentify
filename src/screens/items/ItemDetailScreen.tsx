@@ -22,16 +22,10 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
-import { HomeStackParamList } from '../../navigation/types';
+import { HomeStackParamList, SearchStackParamList } from '../../navigation/types';
 
 type NavProp = StackNavigationProp<HomeStackParamList, 'ItemDetail'>;
-type RouteType = RouteProp<HomeStackParamList, 'ItemDetail'>;
-
-const MOCK_OWNER = {
-  nom: 'Mohammed Alami',
-  avis: 47,
-  note: 4.9,
-};
+type RouteType = RouteProp<HomeStackParamList | SearchStackParamList, 'ItemDetail'>;
 
 const FALLBACK_DESCRIPTION =
   'Objet en parfait état, entretenu régulièrement. Idéal pour vos projets ponctuels. Disponible à la location à Agadir. Livraison possible sur Agadir centre. Contactez-moi pour plus d\'informations et disponibilités.';
@@ -50,11 +44,6 @@ export default function ItemDetailScreen() {
   const isLongDescription = description.length > 120;
 
   const categoryInfo = Categories.find((c) => c.id === item.categorie);
-
-  const ownerInitials = MOCK_OWNER.nom
-    .split(' ')
-    .map((n) => n[0])
-    .join('');
 
   return (
     <View style={styles.root}>
@@ -122,10 +111,10 @@ export default function ItemDetailScreen() {
           {/* B. Propriétaire */}
           <View style={styles.ownerCard}>
             <View style={styles.ownerAvatar}>
-              <Text style={styles.ownerInitials}>{ownerInitials}</Text>
+              <Text style={styles.ownerInitials}>{item.proprietaire.initiales}</Text>
             </View>
             <View style={styles.ownerInfo}>
-              <Text style={styles.ownerName}>{MOCK_OWNER.nom}</Text>
+              <Text style={styles.ownerName}>{item.proprietaire.nom}</Text>
               <Text style={styles.ownerLabel}>Propriétaire</Text>
             </View>
             <TouchableOpacity style={styles.contactButton} activeOpacity={0.8}>

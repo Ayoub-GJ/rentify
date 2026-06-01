@@ -263,7 +263,7 @@ export default function SearchScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="search-outline" size={64} color={Colors.textTertiary} />
             <Text style={styles.emptyTitle}>Aucun objet trouvé</Text>
-            <Text style={styles.emptySubtitle}>Essayez d'autres filtres</Text>
+            <Text style={styles.emptySubtitle}>Essayez d'autres mots-clés ou filtres</Text>
             <TouchableOpacity
               style={styles.emptyResetBtn}
               onPress={() => {
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   // Category chips
   chipsContainer: {
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.md,
+    paddingBottom: 8,
     gap: Spacing.sm,
     flexDirection: 'row',
   },
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 16,
+    paddingTop: 0,
     paddingBottom: 12,
     paddingHorizontal: 16,
   },
@@ -580,8 +580,10 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     alignItems: 'center',
-    paddingTop: Spacing['6xl'],
+    justifyContent: 'center',
+    minHeight: 320,
     gap: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
     fontFamily: Typography.fontHeading,
@@ -610,7 +612,7 @@ const styles = StyleSheet.create({
   // Floating map button
   mapBtnWrap: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 30,
     left: 0,
     right: 0,
     alignItems: 'center',
