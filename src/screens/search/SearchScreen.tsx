@@ -172,14 +172,14 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Header */}
+      {/* Header : search bar + filter button */}
       <View style={styles.header}>
         {canGoBack && (
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
         )}
-        <View style={[styles.searchBar, !canGoBack && styles.searchBarFull]}>
+        <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={Colors.textTertiary} style={styles.searchIcon} />
           <TextInput
             ref={inputRef}
@@ -204,10 +204,11 @@ export default function SearchScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Category chips */}
+      {/* Category chips — marginBottom colle directement la stats row */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
         contentContainerStyle={styles.chipsContainer}
       >
         {CATEGORY_CHIPS.map((cat) => {
@@ -228,7 +229,7 @@ export default function SearchScreen() {
         })}
       </ScrollView>
 
-      {/* Stats + Sort row */}
+      {/* Stats + Sort — directement après les chips, pas de gap */}
       <View style={styles.statsRow}>
         <Text style={styles.statsCount}>
           <Text style={styles.statsCountNum}>{filteredItems.length}</Text> objets disponibles
@@ -252,11 +253,12 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {/* Results */}
+      {/* Results — flex: 1 pour remplir l'espace restant sans créer de gap */}
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        style={styles.flatList}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -279,19 +281,17 @@ export default function SearchScreen() {
         }
       />
 
-      {/* Floating map button */}
-      <View style={styles.mapBtnWrap} pointerEvents="box-none">
-        <TouchableOpacity
-          style={styles.mapBtn}
-          activeOpacity={0.85}
-          onPress={() =>
-            Alert.alert('Bientôt disponible', 'La vue carte sera disponible prochainement.', [{ text: 'OK' }])
-          }
-        >
-          <Ionicons name="map-outline" size={18} color={Colors.textInverse} />
-          <Text style={styles.mapBtnText}>Carte</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bouton Carte : absolute, ne pousse aucun élément */}
+      <TouchableOpacity
+        style={styles.mapBtn}
+        activeOpacity={0.85}
+        onPress={() =>
+          Alert.alert('Bientôt disponible', 'La vue carte sera disponible prochainement.', [{ text: 'OK' }])
+        }
+      >
+        <Ionicons name="map-outline" size={20} color={Colors.textInverse} />
+        <Text style={styles.mapBtnText}>Carte</Text>
+      </TouchableOpacity>
 
       {/* Filter Modal */}
       <Modal visible={showFilters} transparent animationType="slide" statusBarTranslucent>
@@ -447,10 +447,14 @@ const styles = StyleSheet.create({
   },
 
   // Category chips
+  chipsScroll: {
+    marginTop: 16,
+    marginBottom: 12,
+    flexGrow: 0,
+  },
   chipsContainer: {
-    paddingHorizontal: Layout.screenPadding,
-    paddingBottom: 8,
-    gap: Spacing.sm,
+    paddingHorizontal: 16,
+    gap: 8,
     flexDirection: 'row',
   },
   chip: {
@@ -476,9 +480,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 0,
-    paddingBottom: 12,
     paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   statsCount: {
     fontFamily: Typography.fontBody,
@@ -511,10 +515,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 
-  // Results list
+  // FlatList + content
+  flatList: {
+    flex: 1,
+  },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 120,
     gap: 12,
   },
 
@@ -580,8 +587,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 320,
+    paddingTop: 80,
     gap: Spacing.lg,
     paddingHorizontal: Spacing.xl,
   },
@@ -609,23 +615,22 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 
-  // Floating map button
-  mapBtnWrap: {
+  // Floating map button — absolute, ne pousse rien
+  mapBtn: {
     position: 'absolute',
     bottom: 30,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  mapBtn: {
+    alignSelf: 'center',
+    left: '25%',
+    right: '25%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
     backgroundColor: Colors.textPrimary,
     borderRadius: Radius.full,
     paddingVertical: 14,
     paddingHorizontal: Spacing['2xl'],
+    zIndex: 10,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
