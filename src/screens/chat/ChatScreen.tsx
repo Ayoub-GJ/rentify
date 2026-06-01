@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   // Messages list
   messagesList: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.md,
     paddingBottom: 80,
   },
 
