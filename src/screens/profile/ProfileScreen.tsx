@@ -73,7 +73,17 @@ function StatCard({ value, label }: { value: string; label: string }) {
 function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
   return (
     <>
-      <TouchableOpacity style={styles.menuRow} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={styles.menuRow}
+        activeOpacity={0.7}
+        onPress={() =>
+          Alert.alert(
+            'Bientôt disponible',
+            'Cette fonctionnalité sera disponible prochainement.',
+            [{ text: 'OK' }],
+          )
+        }
+      >
         <View style={styles.menuIconWrap}>
           <Ionicons name={item.icon} size={20} color={Colors.primary} />
         </View>

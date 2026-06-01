@@ -9,11 +9,10 @@ import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
 import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
+import SearchScreen from '../screens/search/SearchScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-const Placeholder = () => <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
@@ -62,10 +61,10 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Search"
-        component={Placeholder}
+        component={SearchScreen}
         options={{
           tabBarLabel: 'Recherche',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
           ),
         }}
