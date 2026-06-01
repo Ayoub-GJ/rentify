@@ -7,12 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
+import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
-import MesLocationsScreen from '../screens/rentals/MesLocationsScreen';
+import SearchScreen from '../screens/search/SearchScreen';
+import ProfileScreen from '../screens/profile/ProfileScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-const Placeholder = () => <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
@@ -61,10 +61,10 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Search"
-        component={Placeholder}
+        component={SearchScreen}
         options={{
           tabBarLabel: 'Recherche',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
           ),
         }}
@@ -85,20 +85,25 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Locations"
-        component={MesLocationsScreen}
-        options={{
-          tabBarLabel: 'Locations',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
-          ),
+        component={LocationsStackNavigator}
+        options={({ route }) => {
+          const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'MesLocations';
+          const hideTabBar = focusedRoute === 'Chat';
+          return {
+            tabBarLabel: 'Locations',
+            tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+              <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
+            ),
+            ...(hideTabBar && { tabBarStyle: { display: 'none' } }),
+          };
         }}
       />
       <Tab.Screen
         name="Profile"
-        component={Placeholder}
+        component={ProfileScreen}
         options={{
           tabBarLabel: 'Profil',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),
         }}

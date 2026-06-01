@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { StackScreenProps } from '@react-navigation/stack';
+import { LocationsStackParamList } from '../../navigation/types';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -111,7 +113,9 @@ const STATUT_CONFIG: Record<Statut, { label: string; bg: string; color: string }
 
 // ─── RentalCard ───────────────────────────────────────────────
 
-function RentalCard({ rental }: { rental: MockRental }) {
+type NavProp = StackScreenProps<LocationsStackParamList, 'MesLocations'>['navigation'];
+
+function RentalCard({ rental, navigation }: { rental: MockRental; navigation: NavProp }) {
   const cfg = STATUT_CONFIG[rental.statut];
 
   return (
@@ -143,7 +147,10 @@ function RentalCard({ rental }: { rental: MockRental }) {
           </TouchableOpacity>
         )}
         {rental.statut === 'ACCEPTED' && (
-          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOrange]}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnOrange]}
+            onPress={() => navigation.navigate('Chat', { rentalId: rental.id })}
+          >
             <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Contacter</Text>
           </TouchableOpacity>
         )}
@@ -159,7 +166,7 @@ function RentalCard({ rental }: { rental: MockRental }) {
 
 // ─── Section ──────────────────────────────────────────────────
 
-function Section({ title, rentals }: { title: string; rentals: MockRental[] }) {
+function Section({ title, rentals, navigation }: { title: string; rentals: MockRental[]; navigation: NavProp }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -169,7 +176,7 @@ function Section({ title, rentals }: { title: string; rentals: MockRental[] }) {
           <Text style={styles.emptyText}>Aucune location pour l'instant</Text>
         </View>
       ) : (
-        rentals.map((r) => <RentalCard key={r.id} rental={r} />)
+        rentals.map((r) => <RentalCard key={r.id} rental={r} navigation={navigation} />)
       )}
     </View>
   );
@@ -179,7 +186,9 @@ function Section({ title, rentals }: { title: string; rentals: MockRental[] }) {
 
 type Tab = 'encours' | 'historique';
 
-export default function MesLocationsScreen() {
+type Props = StackScreenProps<LocationsStackParamList, 'MesLocations'>;
+
+export default function MesLocationsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>('encours');
 
@@ -232,7 +241,7 @@ export default function MesLocationsScreen() {
         data={listData}
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => (
-          <Section title={item.title} rentals={item.rentals} />
+          <Section title={item.title} rentals={item.rentals} navigation={navigation} />
         )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
