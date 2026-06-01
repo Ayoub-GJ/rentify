@@ -7,8 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { Colors } from '../theme/theme';
 import HomeStackNavigator from './HomeStackNavigator';
+import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
-import MesLocationsScreen from '../screens/rentals/MesLocationsScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -85,12 +85,17 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Locations"
-        component={MesLocationsScreen}
-        options={{
-          tabBarLabel: 'Locations',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
-          ),
+        component={LocationsStackNavigator}
+        options={({ route }) => {
+          const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'MesLocations';
+          const hideTabBar = focusedRoute === 'Chat';
+          return {
+            tabBarLabel: 'Locations',
+            tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+              <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
+            ),
+            ...(hideTabBar && { tabBarStyle: { display: 'none' } }),
+          };
         }}
       />
       <Tab.Screen

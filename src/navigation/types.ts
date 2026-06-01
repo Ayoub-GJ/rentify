@@ -12,11 +12,16 @@ export type HomeStackParamList = {
   Reservation: { item: MockItem };
 };
 
+export type LocationsStackParamList = {
+  MesLocations: undefined;
+  Chat: { rentalId: string };
+};
+
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Search: undefined;
   AddItem: undefined;
-  Locations: undefined;
+  Locations: NavigatorScreenParams<LocationsStackParamList>;
   Profile: undefined;
 };
 
