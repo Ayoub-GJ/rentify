@@ -15,9 +15,13 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme'
 
 // ─── Types ────────────────────────────────────────────────────
 
+type BadgeType = 'validated' | 'count' | 'new';
+
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  badgeText?: string;
+  badgeType?: BadgeType;
 }
 
 interface MenuSection {
@@ -32,43 +36,49 @@ const MENU_SECTIONS: MenuSection[] = [
     title: 'Compte',
     items: [
       { icon: 'person-outline', label: 'Informations personnelles' },
-      { icon: 'notifications-outline', label: 'Notifications' },
-      { icon: 'shield-checkmark-outline', label: 'Sécurité' },
+      { icon: 'shield-outline', label: "Vérification d'identité", badgeText: 'Validée', badgeType: 'validated' },
+      { icon: 'card-outline', label: 'Paiements & virements' },
     ],
   },
   {
-    title: 'Préférences',
+    title: 'Activité',
     items: [
-      { icon: 'language-outline', label: 'Langue (Français)' },
-      { icon: 'moon-outline', label: 'Apparence' },
+      { icon: 'heart-outline', label: 'Favoris', badgeText: '12', badgeType: 'count' },
+      { icon: 'star-outline', label: 'Mes avis' },
+      { icon: 'chatbubble-outline', label: 'Messages', badgeText: '3 nouveaux', badgeType: 'new' },
     ],
   },
   {
     title: 'Aide',
     items: [
       { icon: 'help-circle-outline', label: "Centre d'aide" },
-      { icon: 'chatbubble-outline', label: 'Nous contacter' },
-      { icon: 'document-text-outline', label: "Conditions d'utilisation" },
+      { icon: 'shield-checkmark-outline', label: 'Assurance & litiges' },
+      { icon: 'settings-outline', label: 'Paramètres' },
     ],
   },
 ];
 
-const MOCK_STATS = [
-  { value: '12', label: 'Locations effectuées' },
-  { value: '5', label: 'Objets publiés' },
-  { value: '4.8', label: 'Note moyenne' },
-];
+// ─── Badge ────────────────────────────────────────────────────
 
-// ─── Sub-components ───────────────────────────────────────────
-
-function StatCard({ value, label }: { value: string; label: string }) {
+function Badge({ text, type }: { text: string; type: BadgeType }) {
+  if (type === 'count') {
+    return <Text style={styles.badgeCount}>{text}</Text>;
+  }
+  if (type === 'validated') {
+    return (
+      <View style={styles.badgeValidated}>
+        <Text style={styles.badgeValidatedText}>{text}</Text>
+      </View>
+    );
+  }
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.badgeNew}>
+      <Text style={styles.badgeNewText}>{text}</Text>
     </View>
   );
 }
+
+// ─── MenuRow ──────────────────────────────────────────────────
 
 function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
   return (
@@ -88,6 +98,9 @@ function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
           <Ionicons name={item.icon} size={20} color={Colors.primary} />
         </View>
         <Text style={styles.menuLabel}>{item.label}</Text>
+        {item.badgeText && item.badgeType && (
+          <Badge text={item.badgeText} type={item.badgeType} />
+        )}
         <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
       </TouchableOpacity>
       {!isLast && <View style={styles.menuSep} />}
@@ -106,7 +119,6 @@ export default function ProfileScreen() {
   }, []);
 
   const displayName = user ? `${user.prenom} ${user.nom}` : '—';
-  const email = user?.email ?? '—';
   const initials = user
     ? `${user.prenom[0] ?? ''}${user.nom[0] ?? ''}`.toUpperCase()
     : '?';
@@ -144,19 +156,36 @@ export default function ProfileScreen() {
             <Ionicons name="camera-outline" size={16} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
+
         <Text style={styles.userName}>{displayName}</Text>
-        <Text style={styles.userEmail}>{email}</Text>
-        <View style={styles.verifiedRow}>
-          <Ionicons name="checkmark-circle" size={16} color={Colors.secondary} />
-          <Text style={styles.verifiedText}>Vérifié</Text>
+
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
+          <Text style={styles.locationText}>Agadir, Maroc · Membre depuis 2024</Text>
+        </View>
+
+        <View style={styles.verifiedBadge}>
+          <Ionicons name="star" size={13} color={Colors.secondary} />
+          <Text style={styles.verifiedBadgeText}>Profil vérifié</Text>
         </View>
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        {MOCK_STATS.map((s) => (
-          <StatCard key={s.label} value={s.value} label={s.label} />
-        ))}
+      {/* Stats — card unifiée avec séparateurs */}
+      <View style={styles.statsCard}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>24</Text>
+          <Text style={styles.statLabel}>Locations</Text>
+        </View>
+        <View style={styles.statSep} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>4.9</Text>
+          <Text style={styles.statLabel}>Note moyenne</Text>
+        </View>
+        <View style={styles.statSep} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>1 420</Text>
+          <Text style={styles.statLabel}>MAD gagnés</Text>
+        </View>
       </View>
 
       {/* Menu sections */}
@@ -195,7 +224,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // Header
+  // ── Header ──
   headerBg: {
     backgroundColor: Colors.primaryXLight,
     alignItems: 'center',
@@ -237,40 +266,53 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontDisplay,
     fontSize: 22,
     color: Colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  userEmail: {
-    fontFamily: Typography.fontBody,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-  },
-  verifiedRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: Spacing.md,
   },
-  verifiedText: {
+  locationText: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.secondaryXLight,
+    borderRadius: Radius.full,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  verifiedBadgeText: {
     fontFamily: Typography.fontBodyMedium,
     fontSize: 13,
     color: Colors.secondary,
   },
 
-  // Stats
-  statsRow: {
+  // ── Stats — card unifiée ──
+  statsCard: {
     flexDirection: 'row',
-    marginHorizontal: Spacing.lg,
-    marginTop: -20,
-    gap: Spacing.sm,
-  },
-  statCard: {
-    flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginTop: -20,
+    paddingVertical: Spacing.lg,
+    ...Shadows.card,
+  },
+  statItem: {
+    flex: 1,
     alignItems: 'center',
     gap: Spacing.xs,
-    ...Shadows.card,
+  },
+  statSep: {
+    width: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 4,
   },
   statValue: {
     fontFamily: Typography.fontDisplay,
@@ -284,7 +326,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Menu
+  // ── Menu ──
   menuSection: {
     marginTop: Spacing.xl,
     paddingHorizontal: Spacing.lg,
@@ -330,7 +372,36 @@ const styles = StyleSheet.create({
     marginLeft: 72,
   },
 
-  // Logout
+  // ── Badges ──
+  badgeCount: {
+    fontFamily: Typography.fontBody,
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  badgeValidated: {
+    backgroundColor: Colors.secondaryXLight,
+    borderRadius: Radius.full,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  badgeValidatedText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 12,
+    color: Colors.secondary,
+  },
+  badgeNew: {
+    backgroundColor: Colors.primaryXLight,
+    borderRadius: Radius.full,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  badgeNewText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 12,
+    color: Colors.primary,
+  },
+
+  // ── Logout ──
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
