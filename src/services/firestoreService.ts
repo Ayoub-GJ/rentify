@@ -10,7 +10,8 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '../config/firebase.config';
+import { db, storage } from '../config/firebase.config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Item, Rental, CreateRentalData, Categorie, StatutDemande } from '../types';
 
 /**
@@ -22,7 +23,7 @@ import { Item, Rental, CreateRentalData, Categorie, StatutDemande } from '../typ
  */
 export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
   try {
-    const newItem = {
+    const docRef = await addDoc(collection(db, 'items'), {
       titre: item.titre,
       description: item.description,
       categorie: item.categorie,
@@ -30,11 +31,9 @@ export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
       ville: item.ville,
       photoUrl: item.photoUrl,
       ownerId: item.ownerId,
-      actif: item.actif,
+      disponible: item.actif,
       datePublication: Timestamp.fromDate(item.datePublication),
-    };
-
-    const docRef = await addDoc(collection(db, 'items'), newItem);
+    });
     return docRef.id;
   } catch (error: any) {
     console.error('Erreur createItem:', error);
@@ -310,5 +309,44 @@ export const getItemsByOwner = async (ownerId: string): Promise<Item[]> => {
   } catch (error) {
     console.error('Erreur getItemsByOwner:', error);
     return [];
+  }
+};
+
+/**
+ * Mettre à jour un objet existant
+ */
+export const updateItem = async (
+  itemId: string,
+  data: Partial<Item> & { images?: string[] }
+): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'items', itemId), data as Record<string, unknown>);
+  } catch (error) {
+    console.error('Erreur updateItem:', error);
+    throw new Error('Impossible de mettre à jour l\'objet');
+  }
+};
+
+/**
+ * Uploader les images d'un objet dans Firebase Storage
+ * Retourne le tableau de download URLs
+ */
+export const uploadItemImages = async (
+  localUris: string[],
+  itemId: string
+): Promise<string[]> => {
+  try {
+    const downloadURLs: string[] = [];
+    for (let i = 0; i < localUris.length; i++) {
+      const blob = await fetch(localUris[i]).then(r => r.blob());
+      const storageRef = ref(storage, `items/${itemId}/image_${i}.jpg`);
+      await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(storageRef);
+      downloadURLs.push(url);
+    }
+    return downloadURLs;
+  } catch (error) {
+    console.error('Erreur uploadItemImages:', error);
+    throw new Error('Impossible d\'uploader les images');
   }
 };

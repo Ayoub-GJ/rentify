@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   useWindowDimensions,
 } from 'react-native';
@@ -17,6 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, TabActions } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { auth } from '../../config/firebase.config';
+import { createItem, uploadItemImages, updateItem } from '../../services/firestoreService';
+import { Categorie } from '../../types';
 import {
   Colors,
   Typography,
@@ -94,6 +98,7 @@ export default function AddItemScreen() {
     ville: '',
   });
   const [currentStep, setCurrentStep] = useState(1);
+  const [uploading, setUploading] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const chipWidth = (screenWidth - Layout.screenPadding * 2 - Spacing.md) / 2;
@@ -178,13 +183,52 @@ export default function AddItemScreen() {
 
   // ── Publish ──
 
-  function publish() {
-    console.log('formData:', formData);
-    Alert.alert(
-      'Annonce publiée !',
-      'Elle sera visible sous peu après vérification.',
-      [{ text: 'OK', onPress: goBack }],
-    );
+  async function publish() {
+    if (!auth.currentUser) {
+      Alert.alert('Erreur', 'Vous devez être connecté pour publier.');
+      return;
+    }
+
+    if (
+      !formData.titre.trim() ||
+      !formData.description.trim() ||
+      !formData.prixParJour ||
+      !formData.categorie ||
+      !formData.ville.trim()
+    ) {
+      Alert.alert('Champs manquants', 'Remplis tous les champs obligatoires.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const user = auth.currentUser;
+
+      const itemId = await createItem({
+        titre: formData.titre,
+        description: formData.description,
+        categorie: formData.categorie as unknown as Categorie,
+        prixParJour: parseFloat(formData.prixParJour),
+        ville: formData.ville,
+        photoUrl: '',
+        ownerId: user.uid,
+        actif: true,
+        datePublication: new Date(),
+      });
+
+      if (formData.photos.length > 0) {
+        const downloadURLs = await uploadItemImages(formData.photos, itemId);
+        await updateItem(itemId, { images: downloadURLs });
+      }
+
+      setUploading(false);
+      Alert.alert('Succès', 'Votre objet a été publié !', [
+        { text: 'OK', onPress: goBack },
+      ]);
+    } catch {
+      setUploading(false);
+      Alert.alert('Erreur', 'Une erreur est survenue. Réessayez.');
+    }
   }
 
   // ── Step 1 ──
@@ -447,11 +491,16 @@ export default function AddItemScreen() {
         >
           {currentStep === 3 ? (
             <TouchableOpacity
-              style={styles.btnPublish}
+              style={[styles.btnPublish, uploading && { opacity: 0.7 }]}
               onPress={publish}
               activeOpacity={0.88}
+              disabled={uploading}
             >
-              <Text style={styles.btnPrimaryText}>Publier l'annonce</Text>
+              {uploading ? (
+                <ActivityIndicator color={Colors.textInverse} />
+              ) : (
+                <Text style={styles.btnPrimaryText}>Publier l'annonce</Text>
+              )}
             </TouchableOpacity>
           ) : (
             <View style={styles.btnRow}>
