@@ -10,6 +10,7 @@ export interface MockItem {
   note: number;
   avis: number;
   proprietaire: { nom: string; initiales: string };
+  proprietaireId?: string;
   description?: string;
 }
 

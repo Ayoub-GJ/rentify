@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, TabActions } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { auth } from '../../config/firebase.config';
+import { getDoc, doc } from 'firebase/firestore';
+import { auth, db } from '../../config/firebase.config';
 import { createItem, uploadItemImages, updateItem } from '../../services/firestoreService';
 import { Categorie } from '../../types';
 import {
@@ -204,6 +205,16 @@ export default function AddItemScreen() {
     try {
       const user = auth.currentUser;
 
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      const nomComplet = userData?.nom ?? user.displayName ?? 'Utilisateur';
+      const initiales = nomComplet
+        .split(' ')
+        .filter((w: string) => w.length > 0)
+        .map((w: string) => w[0].toUpperCase())
+        .join('')
+        .slice(0, 2) || 'U';
+
       const itemId = await createItem({
         titre: formData.titre,
         description: formData.description,
@@ -212,6 +223,8 @@ export default function AddItemScreen() {
         ville: formData.ville,
         photoUrl: '',
         ownerId: user.uid,
+        proprietaireId: user.uid,
+        proprietaire: { nom: nomComplet, initiales },
         actif: true,
         datePublication: new Date(),
       });

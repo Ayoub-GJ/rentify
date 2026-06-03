@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
   Platform,
 } from 'react-native';
+import SmartImage from '../../components/SmartImage';
+import { getUserById } from '../../services/firestoreService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -39,6 +40,24 @@ export default function ItemDetailScreen() {
 
   const [isFav, setIsFav] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [proprietaire, setProprietaire] = useState(item.proprietaire);
+
+  useEffect(() => {
+    if (proprietaire.nom === 'Propriétaire' && item.proprietaireId) {
+      getUserById(item.proprietaireId).then((user) => {
+        if (user) {
+          const nomComplet = `${user.prenom} ${user.nom}`.trim() || user.nom || 'Propriétaire';
+          const initiales = nomComplet
+            .split(' ')
+            .filter((w) => w.length > 0)
+            .map((w) => w[0].toUpperCase())
+            .join('')
+            .slice(0, 2) || '?';
+          setProprietaire({ nom: nomComplet, initiales });
+        }
+      });
+    }
+  }, [item.proprietaireId]);
 
   const description = item.description ?? FALLBACK_DESCRIPTION;
   const isLongDescription = description.length > 120;
@@ -53,8 +72,8 @@ export default function ItemDetailScreen() {
       >
         {/* ── Image hero ── */}
         <View>
-          <Image
-            source={{ uri: item.images[0] }}
+          <SmartImage
+            uri={item.images[0] ?? ''}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -111,10 +130,10 @@ export default function ItemDetailScreen() {
           {/* B. Propriétaire */}
           <View style={styles.ownerCard}>
             <View style={styles.ownerAvatar}>
-              <Text style={styles.ownerInitials}>{item.proprietaire.initiales}</Text>
+              <Text style={styles.ownerInitials}>{proprietaire.initiales}</Text>
             </View>
             <View style={styles.ownerInfo}>
-              <Text style={styles.ownerName}>{item.proprietaire.nom}</Text>
+              <Text style={styles.ownerName}>{proprietaire.nom}</Text>
               <Text style={styles.ownerLabel}>Propriétaire</Text>
             </View>
             <TouchableOpacity style={styles.contactButton} activeOpacity={0.8}>

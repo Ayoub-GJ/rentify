@@ -6,10 +6,10 @@ import {
   FlatList,
   ScrollView,
   StyleSheet,
-  Image,
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
+import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -38,10 +38,11 @@ function toMockItem(item: Item): MockItem {
     prixParJour: item.prixParJour,
     disponible: item.actif,
     distance: 0,
-    images: [item.photoUrl],
+    images: (item.images && item.images.length > 0) ? item.images : (item.photoUrl ? [item.photoUrl] : []),
     note: 0,
     avis: 0,
-    proprietaire: { nom: 'Propriétaire', initiales: '?' },
+    proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
+    proprietaireId: item.proprietaireId ?? item.ownerId,
     description: item.description,
   };
 }
@@ -68,8 +69,8 @@ function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
       onPress={onPress}
     >
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: item.photoUrl }}
+        <SmartImage
+          uri={item.photoUrl}
           style={styles.cardImage}
           resizeMode="cover"
         />

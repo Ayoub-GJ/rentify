@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
   Animated,
   useWindowDimensions,
 } from 'react-native';
@@ -17,6 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { auth } from '../../config/firebase.config';
+import { createRental, getItemById } from '../../services/firestoreService';
+import { StatutDemande } from '../../types';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 import { HomeStackParamList } from '../../navigation/types';
 
@@ -82,6 +86,7 @@ export default function ReservationScreen() {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const summaryAnim = useRef(new Animated.Value(0)).current;
 
@@ -147,12 +152,38 @@ export default function ReservationScreen() {
   const total = duration * item.prixParJour;
   const canReserve = startDate !== null && endDate !== null && duration > 0;
 
-  function handleConfirm() {
-    Alert.alert(
-      'Demande envoyée !',
-      'Le propriétaire a été notifié de votre demande de réservation.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }],
-    );
+  async function handleConfirm() {
+    if (!auth.currentUser || !startDate || !endDate) return;
+
+    setLoading(true);
+    try {
+      const fullItem = await getItemById(item.id);
+      if (!fullItem) throw new Error('Objet introuvable');
+
+      await createRental({
+        itemId: item.id,
+        itemTitre: item.titre,
+        itemImage: item.images?.[0] ?? '',
+        locataireId: auth.currentUser.uid,
+        proprietaireId: fullItem.proprietaireId ?? fullItem.ownerId ?? '',
+        dateDebut: startDate,
+        dateFin: endDate,
+        jours: duration,
+        prixTotal: total,
+        message: message.trim(),
+        statut: StatutDemande.PENDING,
+      });
+
+      setLoading(false);
+      Alert.alert(
+        'Demande envoyée',
+        'Le propriétaire sera notifié.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch {
+      setLoading(false);
+      Alert.alert('Erreur', 'Impossible d\'envoyer la demande. Réessayez.');
+    }
   }
 
   // ── Day cell renderer ─────────────────────────────────────
@@ -398,11 +429,16 @@ export default function ReservationScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              style={styles.confirmBtn}
+              style={[styles.confirmBtn, loading && { opacity: 0.7 }]}
               activeOpacity={0.88}
               onPress={handleConfirm}
+              disabled={loading}
             >
-              <Text style={styles.confirmBtnText}>Demander →</Text>
+              {loading ? (
+                <ActivityIndicator color={Colors.textInverse} />
+              ) : (
+                <Text style={styles.confirmBtnText}>Demander →</Text>
+              )}
             </TouchableOpacity>
           </>
         ) : (

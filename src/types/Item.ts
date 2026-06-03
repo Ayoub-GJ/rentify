@@ -17,8 +17,11 @@ export interface Item {
   categorie: Categorie;          // Catégorie de l'objet
   prixParJour: number;           // Prix par jour en MAD
   ville: string;                 // Ville où se trouve l'objet
-  photoUrl: string;              // URL de la photo
-  ownerId: string;               // ID du propriétaire
+  photoUrl: string;              // URL de la première photo (dénormalisé)
+  images?: string[];             // Tableau de toutes les photos
+  ownerId: string;               // ID du propriétaire (legacy)
+  proprietaireId?: string;       // ID du propriétaire (nouveau format)
+  proprietaire?: { nom: string; initiales: string }; // Infos affichage
   actif: boolean;                // Objet disponible ou non
   datePublication: Date;         // Date de publication
 }

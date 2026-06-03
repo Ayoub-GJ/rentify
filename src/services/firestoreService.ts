@@ -9,10 +9,31 @@ import {
   where,
   orderBy,
   Timestamp,
+  serverTimestamp,
+  QueryDocumentSnapshot as QDS,
+  DocumentSnapshot as DS,
 } from 'firebase/firestore';
 import { db, storage } from '../config/firebase.config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Item, Rental, CreateRentalData, Categorie, StatutDemande } from '../types';
+import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User } from '../types';
+
+// ─── RentalData ───────────────────────────────────────────────
+// Format étendu stocké dans Firestore (champs dénormalisés)
+export interface RentalData {
+  id: string;
+  itemId: string;
+  itemTitre: string;
+  itemImage: string;
+  locataireId: string;
+  proprietaireId: string;
+  dateDebut: Date;
+  dateFin: Date;
+  jours: number;
+  prixTotal: number;
+  message: string;
+  statut: StatutDemande;
+  createdAt?: Date;
+}
 
 /**
  * GESTION DES OBJETS (ITEMS)
@@ -31,6 +52,8 @@ export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
       ville: item.ville,
       photoUrl: item.photoUrl,
       ownerId: item.ownerId,
+      proprietaireId: item.proprietaireId ?? item.ownerId,
+      proprietaire: item.proprietaire ?? null,
       disponible: item.actif,
       datePublication: Timestamp.fromDate(item.datePublication),
     });
@@ -117,38 +140,16 @@ export const getMyItems = async (ownerId: string): Promise<Item[]> => {
  * Créer une demande de location
  */
 export const createRental = async (
-  data: CreateRentalData,
-  renterId: string,
-  ownerId: string
+  rentalData: Omit<RentalData, 'id' | 'createdAt'>
 ): Promise<string> => {
   try {
-    // Calculer le nombre de jours
-    const msPerDay = 1000 * 60 * 60 * 24;
-    const days = Math.ceil(
-      (data.dateFin.getTime() - data.dateDebut.getTime()) / msPerDay
-    );
-
-    // Récupérer le prix de l'objet
-    const itemDoc = await getDoc(doc(db, 'items', data.itemId));
-    if (!itemDoc.exists()) {
-      throw new Error('Objet introuvable');
-    }
-
-    const itemData = itemDoc.data();
-    const prixTotal = itemData.prixParJour * days;
-
-    const newRental = {
-      itemId: data.itemId,
-      renterId: renterId,
-      ownerId: ownerId,
-      dateDebut: Timestamp.fromDate(data.dateDebut),
-      dateFin: Timestamp.fromDate(data.dateFin),
-      prixTotal: prixTotal,
+    const docRef = await addDoc(collection(db, 'rentals'), {
+      ...rentalData,
+      dateDebut: Timestamp.fromDate(rentalData.dateDebut),
+      dateFin: Timestamp.fromDate(rentalData.dateFin),
       statut: StatutDemande.PENDING,
-      dateCreation: Timestamp.now(),
-    };
-
-    const docRef = await addDoc(collection(db, 'rentals'), newRental);
+      createdAt: serverTimestamp(),
+    });
     return docRef.id;
   } catch (error: any) {
     console.error('Erreur createRental:', error);
@@ -221,6 +222,8 @@ export const rejectRental = async (rentalId: string): Promise<void> => {
 
 function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapshot | import('firebase/firestore').DocumentSnapshot): Item {
   const data = docSnap.data()!;
+  // images[] prime sur photoUrl : les nouveaux items stockent images[] après upload
+  const firstImage = Array.isArray(data.images) && data.images.length > 0 ? data.images[0] : '';
   return {
     id: docSnap.id,
     titre: data.titre,
@@ -228,11 +231,11 @@ function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapsho
     categorie: data.categorie as Categorie,
     prixParJour: data.prixParJour,
     ville: data.ville,
-    // seed stocke images[] ; les futurs items stockeront photoUrl
-    photoUrl: data.photoUrl ?? data.images?.[0] ?? '',
-    // seed stocke ownerId absent ; les futurs items l'auront
-    ownerId: data.ownerId ?? '',
-    // seed stocke "disponible" ; les futurs items stockeront "actif"
+    photoUrl: firstImage || data.photoUrl || '',
+    images: Array.isArray(data.images) ? data.images : (data.photoUrl ? [data.photoUrl] : []),
+    ownerId: data.ownerId ?? data.proprietaireId ?? '',
+    proprietaireId: data.proprietaireId ?? data.ownerId ?? '',
+    proprietaire: data.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
     actif: data.actif ?? data.disponible ?? true,
     datePublication: data.datePublication instanceof Timestamp
       ? data.datePublication.toDate()
@@ -324,6 +327,103 @@ export const updateItem = async (
   } catch (error) {
     console.error('Erreur updateItem:', error);
     throw new Error('Impossible de mettre à jour l\'objet');
+  }
+};
+
+// ─── Helpers rentals ─────────────────────────────────────────
+
+function mapRentalDoc(docSnap: QDS | DS): RentalData {
+  const data = docSnap.data()!;
+  return {
+    id: docSnap.id,
+    itemId: data.itemId ?? '',
+    itemTitre: data.itemTitre ?? '',
+    itemImage: data.itemImage ?? '',
+    locataireId: data.locataireId ?? '',
+    proprietaireId: data.proprietaireId ?? '',
+    dateDebut: data.dateDebut instanceof Timestamp ? data.dateDebut.toDate() : new Date(data.dateDebut),
+    dateFin: data.dateFin instanceof Timestamp ? data.dateFin.toDate() : new Date(data.dateFin),
+    jours: data.jours ?? 0,
+    prixTotal: data.prixTotal ?? 0,
+    message: data.message ?? '',
+    statut: data.statut as StatutDemande,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : undefined,
+  };
+}
+
+/**
+ * Récupérer les locations où l'utilisateur est locataire
+ */
+export const getRentalsByLocataire = async (uid: string): Promise<RentalData[]> => {
+  try {
+    const q = query(collection(db, 'rentals'), where('locataireId', '==', uid));
+    const snapshot = await getDocs(q);
+    const rentals = snapshot.docs.map(mapRentalDoc);
+    rentals.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    return rentals;
+  } catch (error) {
+    console.error('Erreur getRentalsByLocataire:', error);
+    return [];
+  }
+};
+
+/**
+ * Récupérer les locations où l'utilisateur est propriétaire
+ */
+export const getRentalsByProprietaire = async (uid: string): Promise<RentalData[]> => {
+  try {
+    const q = query(collection(db, 'rentals'), where('proprietaireId', '==', uid));
+    const snapshot = await getDocs(q);
+    const rentals = snapshot.docs.map(mapRentalDoc);
+    rentals.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    return rentals;
+  } catch (error) {
+    console.error('Erreur getRentalsByProprietaire:', error);
+    return [];
+  }
+};
+
+/**
+ * Mettre à jour le statut d'une location
+ */
+export const updateRentalStatus = async (
+  rentalId: string,
+  statut: StatutDemande
+): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'rentals', rentalId), {
+      statut,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Erreur updateRentalStatus:', error);
+    throw new Error('Impossible de mettre à jour le statut');
+  }
+};
+
+/**
+ * Récupérer un utilisateur par son uid
+ */
+export const getUserById = async (uid: string): Promise<User | null> => {
+  try {
+    const docSnap = await getDoc(doc(db, 'users', uid));
+    if (!docSnap.exists()) return null;
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      email: data.email ?? '',
+      nom: data.nom ?? '',
+      prenom: data.prenom ?? '',
+      telephone: data.telephone ?? '',
+      ville: data.ville ?? '',
+      photoUrl: data.photoUrl,
+      dateInscription: data.dateInscription instanceof Timestamp
+        ? data.dateInscription.toDate()
+        : new Date(data.dateInscription ?? Date.now()),
+    };
+  } catch (error) {
+    console.error('Erreur getUserById:', error);
+    return null;
   }
 };
 
