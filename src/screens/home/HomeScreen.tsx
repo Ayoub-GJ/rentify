@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,16 @@ import {
   StyleSheet,
   Image,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
+import { getAllItems, getItemsByCategory } from '../../services/firestoreService';
+import { Item } from '../../types';
+import { MockItem } from '../../data/mockItems';
 import {
   Colors,
   Typography,
@@ -23,18 +27,35 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
-import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
 import { HomeStackParamList } from '../../navigation/types';
+
+function toMockItem(item: Item): MockItem {
+  return {
+    id: item.id,
+    titre: item.titre,
+    categorie: item.categorie.toLowerCase(),
+    ville: item.ville,
+    prixParJour: item.prixParJour,
+    disponible: item.actif,
+    distance: 0,
+    images: [item.photoUrl],
+    note: 0,
+    avis: 0,
+    proprietaire: { nom: 'Propriétaire', initiales: '?' },
+    description: item.description,
+  };
+}
 
 type HomeNavProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
 const CHIPS = [ALL_CHIP, ...Categories] as const;
 
+
 // ─── ItemCard ─────────────────────────────────────────────────
 
 interface ItemCardProps {
-  item: MockItem;
+  item: Item;
   cardWidth: number;
   onPress: () => void;
 }
@@ -48,7 +69,7 @@ function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
     >
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: item.images[0] }}
+          source={{ uri: item.photoUrl }}
           style={styles.cardImage}
           resizeMode="cover"
         />
@@ -65,12 +86,6 @@ function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
         <View style={styles.cardLocation}>
           <Ionicons name="location" size={11} color={Colors.primary} />
           <Text style={styles.cardLocationText}>{item.ville}</Text>
-        </View>
-
-        <View style={styles.cardRating}>
-          <Ionicons name="star" size={12} color="#F0A020" />
-          <Text style={styles.cardRatingNote}>{item.note}</Text>
-          <Text style={styles.cardRatingAvis}>({item.avis} avis)</Text>
         </View>
 
         <View style={styles.cardFooter}>
@@ -92,13 +107,31 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeNavProp>();
 
   const [activeCategory, setActiveCategory] = useState<string>('tout');
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const firebaseUser = getCurrentUser();
   const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'Ayoub';
 
-  const filteredItems = useMemo(() => {
-    if (activeCategory === 'tout') return MOCK_ITEMS;
-    return MOCK_ITEMS.filter((i) => i.categorie === activeCategory);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    const fetch = async () => {
+      let result: Item[];
+      if (activeCategory === 'tout') {
+        result = await getAllItems();
+      } else {
+        result = await getItemsByCategory(activeCategory);
+      }
+      if (!cancelled) {
+        setItems(result);
+        setLoading(false);
+      }
+    };
+
+    fetch();
+    return () => { cancelled = true; };
   }, [activeCategory]);
 
   const cardWidth = useMemo(() => {
@@ -108,11 +141,11 @@ export default function HomeScreen() {
   }, [screenWidth]);
 
   const renderItem = useCallback(
-    ({ item }: { item: MockItem }) => (
+    ({ item }: { item: Item }) => (
       <ItemCard
         item={item}
         cardWidth={cardWidth}
-        onPress={() => navigation.navigate('ItemDetail', { item })}
+        onPress={() => navigation.navigate('ItemDetail', { item: toMockItem(item) })}
       />
     ),
     [cardWidth, navigation],
@@ -196,10 +229,21 @@ export default function HomeScreen() {
     </>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        {ListHeader}
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <FlatList
-        data={filteredItems}
+        data={items}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={2}
@@ -209,8 +253,8 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyText}>Aucun objet trouvé</Text>
+            <Ionicons name="cube-outline" size={48} color={Colors.textTertiary} />
+            <Text style={styles.emptyText}>Aucun objet disponible</Text>
           </View>
         }
       />
@@ -414,21 +458,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.xs,
     color: Colors.textSecondary,
   },
-  cardRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  cardRatingNote: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 12,
-    color: Colors.textPrimary,
-  },
-  cardRatingAvis: {
-    fontFamily: Typography.fontBody,
-    fontSize: 11,
-    color: Colors.textTertiary,
-  },
   cardFooter: {
     marginTop: Spacing.xs,
   },
@@ -443,6 +472,13 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
 
+  // ── État chargement ──
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   // ── État vide ──
   emptyState: {
     alignItems: 'center',
@@ -453,6 +489,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontFamily: Typography.fontBody,
     fontSize: Typography.size.md,
-    color: Colors.textTertiary,
+    color: Colors.textSecondary,
   },
 });

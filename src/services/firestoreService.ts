@@ -11,7 +11,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase.config';
-import { Item, Rental, CreateItemData, CreateRentalData, Categorie, StatutDemande } from '../types';
+import { Item, Rental, CreateRentalData, Categorie, StatutDemande } from '../types';
 
 /**
  * GESTION DES OBJETS (ITEMS)
@@ -20,21 +20,18 @@ import { Item, Rental, CreateItemData, CreateRentalData, Categorie, StatutDemand
 /**
  * Publier un nouvel objet
  */
-export const createItem = async (
-  data: CreateItemData,
-  ownerId: string
-): Promise<string> => {
+export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
   try {
     const newItem = {
-      titre: data.titre,
-      description: data.description,
-      categorie: data.categorie,
-      prixParJour: data.prixParJour,
-      ville: data.ville,
-      photoUrl: data.photo, // On gérera l'upload d'image plus tard
-      ownerId: ownerId,
-      actif: true,
-      datePublication: Timestamp.now(),
+      titre: item.titre,
+      description: item.description,
+      categorie: item.categorie,
+      prixParJour: item.prixParJour,
+      ville: item.ville,
+      photoUrl: item.photoUrl,
+      ownerId: item.ownerId,
+      actif: item.actif,
+      datePublication: Timestamp.fromDate(item.datePublication),
     };
 
     const docRef = await addDoc(collection(db, 'items'), newItem);
@@ -218,5 +215,100 @@ export const rejectRental = async (rentalId: string): Promise<void> => {
   } catch (error: any) {
     console.error('Erreur rejectRental:', error);
     throw new Error('Impossible de refuser la demande');
+  }
+};
+
+// ─── Helpers de mapping ───────────────────────────────────────
+
+function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapshot | import('firebase/firestore').DocumentSnapshot): Item {
+  const data = docSnap.data()!;
+  return {
+    id: docSnap.id,
+    titre: data.titre,
+    description: data.description ?? '',
+    categorie: data.categorie as Categorie,
+    prixParJour: data.prixParJour,
+    ville: data.ville,
+    // seed stocke images[] ; les futurs items stockeront photoUrl
+    photoUrl: data.photoUrl ?? data.images?.[0] ?? '',
+    // seed stocke ownerId absent ; les futurs items l'auront
+    ownerId: data.ownerId ?? '',
+    // seed stocke "disponible" ; les futurs items stockeront "actif"
+    actif: data.actif ?? data.disponible ?? true,
+    datePublication: data.datePublication instanceof Timestamp
+      ? data.datePublication.toDate()
+      : data.datePublication
+        ? new Date(data.datePublication)
+        : new Date(),
+  };
+}
+
+/**
+ * Récupérer tous les objets disponibles (actif == true), triés par date de publication
+ */
+export const getAllItems = async (): Promise<Item[]> => {
+  try {
+    const q = query(
+      collection(db, 'items'),
+      where('disponible', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    const items = snapshot.docs.map(mapDocToItem);
+    items.sort((a, b) => b.datePublication.getTime() - a.datePublication.getTime());
+    return items;
+  } catch (error) {
+    console.error('Erreur getAllItems:', error);
+    return [];
+  }
+};
+
+/**
+ * Récupérer un objet par son id
+ */
+export const getItemById = async (id: string): Promise<Item | null> => {
+  try {
+    const docSnap = await getDoc(doc(db, 'items', id));
+    if (!docSnap.exists()) return null;
+    return mapDocToItem(docSnap);
+  } catch (error) {
+    console.error('Erreur getItemById:', error);
+    return null;
+  }
+};
+
+/**
+ * Récupérer les objets d'une catégorie donnée (actif == true)
+ */
+export const getItemsByCategory = async (categorie: string | Categorie): Promise<Item[]> => {
+  try {
+    const q = query(
+      collection(db, 'items'),
+      where('categorie', '==', categorie),
+      where('disponible', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    const items = snapshot.docs.map(mapDocToItem);
+    items.sort((a, b) => b.datePublication.getTime() - a.datePublication.getTime());
+    return items;
+  } catch (error) {
+    console.error('Erreur getItemsByCategory:', error);
+    return [];
+  }
+};
+
+/**
+ * Récupérer les objets d'un propriétaire
+ */
+export const getItemsByOwner = async (ownerId: string): Promise<Item[]> => {
+  try {
+    const q = query(
+      collection(db, 'items'),
+      where('ownerId', '==', ownerId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(mapDocToItem);
+  } catch (error) {
+    console.error('Erreur getItemsByOwner:', error);
+    return [];
   }
 };

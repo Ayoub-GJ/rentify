@@ -10,14 +10,34 @@ import {
   Image,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Slider from '@react-native-community/slider';
-import { MOCK_ITEMS, MockItem } from '../../data/mockItems';
+import { getAllItems } from '../../services/firestoreService';
+import { Item } from '../../types';
+import { MockItem } from '../../data/mockItems';
 import { SearchStackParamList } from '../../navigation/types';
+
+function toMockItem(item: Item): MockItem {
+  return {
+    id: item.id,
+    titre: item.titre,
+    categorie: item.categorie.toLowerCase(),
+    ville: item.ville,
+    prixParJour: item.prixParJour,
+    disponible: item.actif,
+    distance: 0,
+    images: [item.photoUrl],
+    note: 0,
+    avis: 0,
+    proprietaire: { nom: 'Propriétaire', initiales: '?' },
+    description: item.description,
+  };
+}
 import {
   Colors,
   Typography,
@@ -60,19 +80,16 @@ const CATEGORY_CHIPS = [ALL_CHIP, ...Categories] as const;
 
 // ─── ItemRow ──────────────────────────────────────────────────
 
-function ItemRow({ item, onPress }: { item: MockItem; onPress: () => void }) {
+function ItemRow({ item, onPress }: { item: Item; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.itemRow} activeOpacity={0.7} onPress={onPress}>
-      <Image source={{ uri: item.images[0] }} style={styles.itemImage} resizeMode="cover" />
+      <Image source={{ uri: item.photoUrl }} style={styles.itemImage} resizeMode="cover" />
       <View style={styles.itemContent}>
         <Text style={styles.itemTitle} numberOfLines={1}>{item.titre}</Text>
         <View style={styles.itemMeta}>
           <Ionicons name="location" size={12} color={Colors.textSecondary} />
-          <Text style={styles.itemMetaText}>{item.distance} km</Text>
-          <Ionicons name="star" size={12} color="#F0A020" style={styles.itemMetaStar} />
-          <Text style={styles.itemMetaText}>{item.note} ({item.avis})</Text>
+          <Text style={styles.itemMetaText}>{item.ville}</Text>
         </View>
-        <Text style={styles.itemOwner}>par {item.proprietaire.nom}</Text>
         <View style={styles.itemPriceRow}>
           <Text style={styles.itemPrice}>{item.prixParJour} MAD</Text>
           <Text style={styles.itemPriceUnit}>/j</Text>
@@ -94,12 +111,21 @@ export default function SearchScreen() {
   const canGoBack = navigation.canGoBack();
   const openFiltersParam: boolean = route?.params?.openFilters ?? false;
 
+  const [allItems, setAllItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('tout');
   const [activeSort, setActiveSort] = useState<SortOption>('proximite');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [pendingFilters, setPendingFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    getAllItems().then((result) => {
+      setAllItems(result);
+      setLoading(false);
+    });
+  }, []);
 
   useEffect(() => {
     if (openFiltersParam) setShowFilters(true);
@@ -111,43 +137,33 @@ export default function SearchScreen() {
   }, []);
 
   const filteredItems = useMemo(() => {
-    let items = [...MOCK_ITEMS];
+    let items = [...allItems];
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter((i) => i.titre.toLowerCase().includes(q));
     }
     if (activeCategory !== 'tout') {
-      items = items.filter((i) => i.categorie === activeCategory);
+      items = items.filter((i) => i.categorie.toLowerCase() === activeCategory);
     }
-    items = items.filter(
-      (i) =>
-        i.prixParJour <= filters.prixMax &&
-        i.distance <= filters.distanceMax &&
-        i.note >= filters.noteMin,
-    );
+    items = items.filter((i) => i.prixParJour <= filters.prixMax);
     if (activeSort === 'prix') items.sort((a, b) => a.prixParJour - b.prixParJour);
-    if (activeSort === 'note') items.sort((a, b) => b.note - a.note);
-    if (activeSort === 'proximite') items.sort((a, b) => a.distance - b.distance);
+    if (activeSort === 'note' || activeSort === 'proximite') {
+      items.sort((a, b) => b.datePublication.getTime() - a.datePublication.getTime());
+    }
     return items;
-  }, [search, activeCategory, activeSort, filters]);
+  }, [search, activeCategory, activeSort, filters, allItems]);
 
-  // Count results with pending filters (for modal button)
   const pendingCount = useMemo(() => {
-    let items = [...MOCK_ITEMS];
+    let items = [...allItems];
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter((i) => i.titre.toLowerCase().includes(q));
     }
     if (activeCategory !== 'tout') {
-      items = items.filter((i) => i.categorie === activeCategory);
+      items = items.filter((i) => i.categorie.toLowerCase() === activeCategory);
     }
-    return items.filter(
-      (i) =>
-        i.prixParJour <= pendingFilters.prixMax &&
-        i.distance <= pendingFilters.distanceMax &&
-        i.note >= pendingFilters.noteMin,
-    ).length;
-  }, [search, activeCategory, pendingFilters]);
+    return items.filter((i) => i.prixParJour <= pendingFilters.prixMax).length;
+  }, [search, activeCategory, pendingFilters, allItems]);
 
   function openModal() {
     setPendingFilters(filters);
@@ -164,8 +180,8 @@ export default function SearchScreen() {
   }
 
   const renderItem = useCallback(
-    ({ item }: { item: MockItem }) => (
-      <ItemRow item={item} onPress={() => navigation.navigate('ItemDetail', { item })} />
+    ({ item }: { item: Item }) => (
+      <ItemRow item={item} onPress={() => navigation.navigate('ItemDetail', { item: toMockItem(item) })} />
     ),
     [navigation],
   );
@@ -232,7 +248,7 @@ export default function SearchScreen() {
       {/* Stats + Sort — directement après les chips, pas de gap */}
       <View style={styles.statsRow}>
         <Text style={styles.statsCount}>
-          <Text style={styles.statsCountNum}>{filteredItems.length}</Text> objets disponibles
+          <Text style={styles.statsCountNum}>{loading ? '–' : filteredItems.length}</Text> objets disponibles
         </Text>
         <View style={styles.sortChips}>
           {SORT_OPTIONS.map((s) => {
@@ -254,32 +270,38 @@ export default function SearchScreen() {
       </View>
 
       {/* Results — flex: 1 pour remplir l'espace restant sans créer de gap */}
-      <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        style={styles.flatList}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={64} color={Colors.textTertiary} />
-            <Text style={styles.emptyTitle}>Aucun objet trouvé</Text>
-            <Text style={styles.emptySubtitle}>Essayez d'autres mots-clés ou filtres</Text>
-            <TouchableOpacity
-              style={styles.emptyResetBtn}
-              onPress={() => {
-                setFilters(DEFAULT_FILTERS);
-                setActiveCategory('tout');
-                setSearch('');
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.emptyResetText}>Réinitialiser les filtres</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredItems}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          style={styles.flatList}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="cube-outline" size={48} color={Colors.textTertiary} />
+              <Text style={styles.emptyTitle}>Aucun objet disponible</Text>
+              <Text style={styles.emptySubtitle}>Essayez d'autres mots-clés ou filtres</Text>
+              <TouchableOpacity
+                style={styles.emptyResetBtn}
+                onPress={() => {
+                  setFilters(DEFAULT_FILTERS);
+                  setActiveCategory('tout');
+                  setSearch('');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.emptyResetText}>Réinitialiser les filtres</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      )}
 
       {/* Bouton Carte : absolute, ne pousse aucun élément */}
       <TouchableOpacity
@@ -528,6 +550,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  // Loading state
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   // Item row card
   itemRow: {
     flexDirection: 'row',
@@ -558,14 +587,6 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   itemMetaText: {
-    fontFamily: Typography.fontBody,
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  itemMetaStar: {
-    marginLeft: Spacing.sm,
-  },
-  itemOwner: {
     fontFamily: Typography.fontBody,
     fontSize: 13,
     color: Colors.textSecondary,
