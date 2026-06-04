@@ -8,13 +8,23 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Modal,
+  Image,
+  ActivityIndicator,
+  ImageStyle,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { auth } from '../../config/firebase.config';
-import { subscribeToMessages, sendMessage } from '../../services/firestoreService';
+import {
+  subscribeToMessages,
+  sendMessage,
+  uploadChatImage,
+} from '../../services/firestoreService';
 import { Message } from '../../types';
 import {
   HomeStackParamList,
@@ -33,6 +43,7 @@ type ChatRoute = RouteProp<
 interface DisplayMessage {
   id: string;
   texte: string;
+  imageUrl?: string;
   moi: boolean;
   heure: string;
   date: string;
@@ -63,6 +74,7 @@ function toDisplayMessage(msg: Message, currentUid: string): DisplayMessage {
   return {
     id: msg.id,
     texte: msg.texte,
+    imageUrl: msg.imageUrl,
     moi: msg.senderId === currentUid,
     heure: getTimeLabel(msg.createdAt),
     date: getDateLabel(msg.createdAt),
@@ -92,22 +104,54 @@ function DateSeparator({ label }: { label: string }) {
 
 // ─── MessageBubble ────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: DisplayMessage }) {
+function MessageBubble({
+  msg,
+  onImagePress,
+}: {
+  msg: DisplayMessage;
+  onImagePress: (uri: string) => void;
+}) {
+  const hasImage = !!msg.imageUrl;
+  const hasText = !!msg.texte && msg.texte.trim().length > 0;
+
   if (msg.moi) {
     return (
       <View style={styles.rowRight}>
-        <View style={styles.bubbleSent}>
-          <Text style={styles.bubbleSentText}>{msg.texte}</Text>
-        </View>
+        {hasImage && (
+          <TouchableOpacity onPress={() => onImagePress(msg.imageUrl!)} activeOpacity={0.9}>
+            <SmartImage
+              uri={msg.imageUrl!}
+              style={StyleSheet.flatten([styles.msgImage, hasText ? { marginBottom: Spacing.xs } : undefined]) as ImageStyle}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        )}
+        {hasText && (
+          <View style={styles.bubbleSent}>
+            <Text style={styles.bubbleSentText}>{msg.texte}</Text>
+          </View>
+        )}
         <Text style={styles.timeRight}>{msg.heure}</Text>
       </View>
     );
   }
+
   return (
     <View style={styles.rowLeft}>
-      <View style={[styles.bubbleReceived, Shadows.sm]}>
-        <Text style={styles.bubbleReceivedText}>{msg.texte}</Text>
-      </View>
+      {hasImage && (
+        <TouchableOpacity onPress={() => onImagePress(msg.imageUrl!)} activeOpacity={0.9}>
+          <SmartImage
+            uri={msg.imageUrl!}
+            style={StyleSheet.flatten([styles.msgImage, hasText ? { marginBottom: Spacing.xs } : undefined]) as ImageStyle}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      )}
+      {hasText && (
+        <View style={[styles.bubbleReceived, Shadows.sm]}>
+          <Text style={styles.bubbleReceivedText}>{msg.texte}</Text>
+        </View>
+      )}
       <Text style={styles.timeLeft}>{msg.heure}</Text>
     </View>
   );
@@ -124,6 +168,8 @@ export default function ChatScreen() {
   const currentUid = auth.currentUser?.uid ?? '';
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  const [sendingImage, setSendingImage] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -133,6 +179,8 @@ export default function ChatScreen() {
     return () => unsubscribe();
   }, [conversationId]);
 
+  // ── Send text ──
+
   async function handleSend() {
     const texte = inputText.trim();
     if (!texte || !currentUid) return;
@@ -140,7 +188,34 @@ export default function ChatScreen() {
     await sendMessage(conversationId, currentUid, texte);
   }
 
-  // Build display list with date separators
+  // ── Send image ──
+
+  const handleSendImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission refusée', "Autorise l'accès aux photos pour envoyer une image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'] as any,
+      quality: 0.6,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setSendingImage(true);
+    try {
+      const imageUrl = await uploadChatImage(result.assets[0].uri, conversationId);
+      await sendMessage(conversationId, currentUid, '', imageUrl);
+    } catch {
+      Alert.alert('Erreur', "Impossible d'envoyer l'image. Réessaie.");
+    } finally {
+      setSendingImage(false);
+    }
+  };
+
+  // ── Build display list with date separators ──
+
   type ListItem =
     | { type: 'separator'; date: string; key: string }
     | { type: 'message'; msg: DisplayMessage; key: string };
@@ -159,74 +234,118 @@ export default function ChatScreen() {
   const initials = getInitials(otherUserName);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: Colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-
-        <View style={styles.headerCenter}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </View>
-          <View>
-            <Text style={styles.headerName}>{otherUserName}</Text>
-            <Text style={styles.headerSub} numberOfLines={1}>{itemTitre}</Text>
-          </View>
-        </View>
-
-      </View>
-
-      {/* Object banner */}
-      <View style={styles.banner}>
-        <SmartImage uri={itemImage} style={styles.bannerImage} resizeMode="cover" />
-        <View style={styles.bannerInfo}>
-          <Text style={styles.bannerTitle} numberOfLines={1}>{itemTitre}</Text>
-        </View>
-      </View>
-
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={listItems}
-        keyExtractor={(item) => item.key}
-        renderItem={({ item }) =>
-          item.type === 'separator'
-            ? <DateSeparator label={item.date} />
-            : <MessageBubble msg={item.msg} />
-        }
-        contentContainerStyle={styles.messagesList}
-        showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-      />
-
-      {/* Input bar */}
-      <View
-        style={[
-          styles.inputBar,
-          { paddingBottom: Platform.OS === 'android' ? 10 : insets.bottom + 8 },
-        ]}
+    <>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: Colors.background }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <TextInput
-          style={styles.textInput}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Message..."
-          placeholderTextColor={Colors.textTertiary}
-          multiline={false}
-          returnKeyType="send"
-          onSubmitEditing={handleSend}
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            </View>
+            <View>
+              <Text style={styles.headerName}>{otherUserName}</Text>
+              <Text style={styles.headerSub} numberOfLines={1}>{itemTitre}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Object banner */}
+        <View style={styles.banner}>
+          <SmartImage uri={itemImage} style={styles.bannerImage} resizeMode="cover" />
+          <View style={styles.bannerInfo}>
+            <Text style={styles.bannerTitle} numberOfLines={1}>{itemTitre}</Text>
+          </View>
+        </View>
+
+        {/* Messages */}
+        <FlatList
+          ref={flatListRef}
+          data={listItems}
+          keyExtractor={(item) => item.key}
+          renderItem={({ item }) =>
+            item.type === 'separator'
+              ? <DateSeparator label={item.date} />
+              : <MessageBubble msg={item.msg} onImagePress={setPreviewImage} />
+          }
+          contentContainerStyle={styles.messagesList}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} activeOpacity={0.8}>
-          <Ionicons name="send" size={20} color={Colors.textInverse} />
+
+        {/* Input bar : [📷] [TextInput] [→ Send] */}
+        <View
+          style={[
+            styles.inputBar,
+            { paddingBottom: Platform.OS === 'android' ? 10 : insets.bottom + 8 },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.imgBtn}
+            onPress={handleSendImage}
+            disabled={sendingImage}
+            activeOpacity={0.8}
+          >
+            {sendingImage ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Ionicons name="image-outline" size={22} color={Colors.primary} />
+            )}
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.textInput}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="Message..."
+            placeholderTextColor={Colors.textTertiary}
+            multiline={false}
+            returnKeyType="send"
+            onSubmitEditing={handleSend}
+          />
+
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSend} activeOpacity={0.8}>
+            <Ionicons name="send" size={20} color={Colors.textInverse} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Full-screen image preview */}
+      <Modal
+        visible={!!previewImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewImage(null)}
+        statusBarTranslucent
+      >
+        <TouchableOpacity
+          style={styles.previewBackdrop}
+          activeOpacity={1}
+          onPress={() => setPreviewImage(null)}
+        >
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setPreviewImage(null)}
+          >
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {previewImage && (
+            <Image
+              source={{ uri: previewImage }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
+          )}
         </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
 
@@ -281,13 +400,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBody,
     fontSize: 12,
     color: Colors.textTertiary,
-  },
-  callBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   // Banner
@@ -392,6 +504,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  // Image message
+  msgImage: {
+    width: 220,
+    height: 220,
+    borderRadius: Radius.lg,
+  },
+
   // Input bar
   inputBar: {
     position: 'absolute',
@@ -406,6 +525,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm + 2,
     gap: Spacing.sm,
+  },
+  imgBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primaryXLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   textInput: {
     flex: 1,
@@ -424,5 +552,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  // Full-screen preview
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewCloseBtn: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    zIndex: 1,
+    padding: Spacing.sm,
+  },
+  previewImage: {
+    width: '100%',
+    height: '80%',
   },
 });

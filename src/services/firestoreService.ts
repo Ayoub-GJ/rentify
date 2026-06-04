@@ -594,6 +594,7 @@ export const subscribeToMessages = (
         conversationId,
         senderId: data.senderId ?? '',
         texte: data.texte ?? '',
+        imageUrl: data.imageUrl ?? undefined,
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
         lu: data.lu ?? false,
       };
@@ -674,26 +675,48 @@ export const getUserStats = async (uid: string): Promise<UserStats> => {
 };
 
 /**
- * Envoie un message dans une conversation et met à jour le lastMessage.
+ * Envoie un message texte et/ou image dans une conversation.
  */
 export const sendMessage = async (
   conversationId: string,
   senderId: string,
-  texte: string
+  texte: string,
+  imageUrl?: string,
 ): Promise<void> => {
+  if (!conversationId || !senderId) return;
+  const trimmed = texte.trim();
+  if (!trimmed && !imageUrl) return;
   try {
-    await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+    const messageData: Record<string, unknown> = {
       senderId,
-      texte,
+      texte: trimmed,
       createdAt: serverTimestamp(),
       lu: false,
-    });
+    };
+    if (imageUrl) messageData.imageUrl = imageUrl;
+
+    await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageData);
     await updateDoc(doc(db, 'conversations', conversationId), {
-      lastMessage: texte,
+      lastMessage: imageUrl ? '📷 Photo' : trimmed,
       lastMessageAt: serverTimestamp(),
     });
   } catch (error) {
     console.error('Erreur sendMessage:', error);
     throw error;
   }
+};
+
+/**
+ * Uploade une image de chat dans Firebase Storage.
+ * Path : conversations/{conversationId}/{timestamp}.jpg
+ */
+export const uploadChatImage = async (
+  localUri: string,
+  conversationId: string,
+): Promise<string> => {
+  if (!localUri || !conversationId) throw new Error('invalid params');
+  const blob = await fetch(localUri).then(r => r.blob());
+  const storageRef = ref(storage, `conversations/${conversationId}/${Date.now()}.jpg`);
+  await uploadBytes(storageRef, blob);
+  return await getDownloadURL(storageRef);
 };

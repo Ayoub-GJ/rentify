@@ -3,6 +3,7 @@ export interface Message {
   conversationId: string;
   senderId: string;
   texte: string;
+  imageUrl?: string;
   createdAt: Date;
   lu: boolean;
 }

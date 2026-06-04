@@ -392,6 +392,110 @@ function DemandeCard({
   );
 }
 
+// ─── Tab 3 — AcceptedCard ────────────────────────────────────
+
+function AcceptedCard({
+  rental,
+  navigation,
+}: {
+  rental: RentalWithOther;
+  navigation: NavProp;
+}) {
+  const [contacting, setContacting] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+
+  const locataire = rental.otherUser;
+  const initiales = getInitials(locataire);
+  const avatarColor = avatarColorFromUid(rental.locataireId);
+  const locataireNom = fullName(locataire);
+
+  async function handleNavigateToItem() {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      const item = await getItemById(rental.itemId);
+      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
+    } catch {
+      Alert.alert('Erreur', 'Impossible de charger cet objet.');
+    } finally {
+      setNavigating(false);
+    }
+  }
+
+  async function handleContact() {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !rental.locataireId) return;
+    setContacting(true);
+    try {
+      const convId = await getOrCreateConversation(
+        uid,
+        rental.locataireId,
+        rental.itemId,
+        rental.itemTitre,
+      );
+      navigation.navigate('Chat', {
+        conversationId: convId,
+        itemTitre: rental.itemTitre,
+        itemImage: rental.itemImage,
+        otherUserName: locataireNom,
+      });
+    } catch {
+      Alert.alert('Erreur', "Impossible d'ouvrir la conversation.");
+    } finally {
+      setContacting(false);
+    }
+  }
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, navigating && { opacity: 0.7 }]}
+      onPress={handleNavigateToItem}
+      activeOpacity={0.75}
+    >
+      {/* Header : avatar + nom + badge */}
+      <View style={styles.demandeHeader}>
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <Text style={styles.avatarText}>{initiales}</Text>
+        </View>
+        <View style={styles.demandeInfo}>
+          <Text style={styles.demandeTitre} numberOfLines={1}>{locataireNom}</Text>
+          <Text style={styles.demandeObjet} numberOfLines={1}>loue {rental.itemTitre}</Text>
+        </View>
+        <View style={[styles.badge, { backgroundColor: Colors.acceptedBg }]}>
+          <Text style={[styles.badgeText, { color: Colors.accepted }]}>Acceptée</Text>
+        </View>
+      </View>
+
+      {/* Dates + prix */}
+      <View style={styles.demandeMeta}>
+        <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+        <Text style={styles.demandeMetaText}>
+          {formatDateRange(rental.dateDebut, rental.dateFin)}
+          {' · '}{rental.jours} jour{rental.jours > 1 ? 's' : ''}
+          {' · '}{rental.prixTotal} MAD
+        </Text>
+      </View>
+
+      {/* Bouton contacter */}
+      <TouchableOpacity
+        style={[styles.btnContactOutline, contacting && { opacity: 0.6 }]}
+        onPress={handleContact}
+        disabled={contacting}
+        activeOpacity={0.8}
+      >
+        {contacting ? (
+          <ActivityIndicator size="small" color={Colors.primary} />
+        ) : (
+          <>
+            <Ionicons name="chatbubble-outline" size={16} color={Colors.primary} />
+            <Text style={styles.btnContactOutlineText}>Contacter</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Tab 3 — DemandesTab ─────────────────────────────────────
 
 function DemandesTab({
@@ -405,7 +509,10 @@ function DemandesTab({
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
 }) {
-  if (demandes.length === 0) {
+  const enAttente = demandes.filter(r => r.statut === StatutDemande.PENDING);
+  const acceptees = demandes.filter(r => r.statut === StatutDemande.ACCEPTED);
+
+  if (enAttente.length === 0 && acceptees.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="notifications-outline" size={52} color={Colors.textTertiary} />
@@ -420,9 +527,25 @@ function DemandesTab({
       contentContainerStyle={styles.tabContent}
       showsVerticalScrollIndicator={false}
     >
-      {demandes.map((r) => (
-        <DemandeCard key={r.id} rental={r} navigation={navigation} onAccept={onAccept} onReject={onReject} />
-      ))}
+      {enAttente.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>En attente</Text>
+          {enAttente.map((r) => (
+            <DemandeCard key={r.id} rental={r} navigation={navigation} onAccept={onAccept} onReject={onReject} />
+          ))}
+        </>
+      )}
+
+      {acceptees.length > 0 && (
+        <>
+          <Text style={[styles.sectionLabel, enAttente.length > 0 && { marginTop: Spacing.xl }]}>
+            Réservations acceptées
+          </Text>
+          {acceptees.map((r) => (
+            <AcceptedCard key={r.id} rental={r} navigation={navigation} />
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -460,7 +583,10 @@ export default function MesLocationsScreen({ navigation, route }: Props) {
       ),
       Promise.all(
         recues
-          .filter((r) => r.statut === StatutDemande.PENDING && r.locataireId && r.locataireId.length > 0)
+          .filter((r) =>
+            (r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED) &&
+            r.locataireId && r.locataireId.length > 0,
+          )
           .map(async (r) => ({
             ...r,
             otherUser: await getUserById(r.locataireId),
@@ -504,7 +630,7 @@ export default function MesLocationsScreen({ navigation, route }: Props) {
   const TABS: { id: Tab; label: string; count: number }[] = [
     { id: 'encours',  label: 'En cours',      count: enCoursCount },
     { id: 'annonces', label: 'Mes annonces',  count: mesItems.length },
-    { id: 'demandes', label: 'Demandes',      count: demandesRecues.length },
+    { id: 'demandes', label: 'Demandes',      count: demandesRecues.filter(r => r.statut === StatutDemande.PENDING).length },
   ];
 
   return (
@@ -765,6 +891,24 @@ const styles = StyleSheet.create({
   badgeText: {
     fontFamily: Typography.fontSubheading,
     fontSize: 11,
+  },
+
+  // ── Accepted card contact button ──
+  btnContactOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: 40,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    marginTop: Spacing.md,
+  },
+  btnContactOutlineText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 14,
+    color: Colors.primary,
   },
 
   // ── CTA button (Tab 2) ──
