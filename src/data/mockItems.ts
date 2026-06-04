@@ -12,6 +12,7 @@ export interface MockItem {
   proprietaire: { nom: string; initiales: string };
   proprietaireId?: string;
   description?: string;
+  periodeMin?: number;
 }
 
 export const MOCK_ITEMS: MockItem[] = [

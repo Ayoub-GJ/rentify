@@ -32,15 +32,17 @@ const FIREBASE_ERRORS: Record<string, string> = {
 };
 
 export default function SignupScreen({ navigation }: SignupScreenProps) {
-  const [nomComplet, setNomComplet] = useState('');
+  const [prenom, setPrenom] = useState('');
+  const [nom, setNom] = useState('');
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [focusedInput, setFocusedInput] = useState<'nom' | 'email' | 'tel' | 'password' | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'prenom' | 'nom' | 'email' | 'tel' | 'password' | null>(null);
 
+  const nomRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const telRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
@@ -49,16 +51,11 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
     Keyboard.dismiss();
     setError('');
 
-    const trimmedNom = nomComplet.trim();
+    const trimmedPrenom = prenom.trim();
     const trimmedEmail = email.trim();
 
-    if (trimmedNom.length === 0) {
-      setError('Veuillez entrer votre nom complet.');
-      return;
-    }
-
-    if (trimmedNom.length < 2) {
-      setError('Le nom doit contenir au moins 2 caractères.');
+    if (trimmedPrenom.length === 0) {
+      setError('Veuillez entrer votre prénom.');
       return;
     }
 
@@ -72,18 +69,13 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       return;
     }
 
-    // Découpe "Prénom Nom" → prenom + nom
-    const parts = trimmedNom.split(' ');
-    const prenom = parts[0];
-    const nom = parts.length > 1 ? parts.slice(1).join(' ') : parts[0];
-
     setLoading(true);
     try {
       await signup({
         email: trimmedEmail,
         password,
-        nom,
-        prenom,
+        prenom: trimmedPrenom,
+        nom: nom.trim(),
         telephone: telephone.trim(),
         ville: '',
       });
@@ -93,7 +85,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
     } finally {
       setLoading(false);
     }
-  }, [nomComplet, email, telephone, password]);
+  }, [prenom, nom, email, telephone, password]);
 
   const borderFor = (field: typeof focusedInput) =>
     focusedInput === field ? Colors.primary : Colors.border;
@@ -142,7 +134,36 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 </View>
               ) : null}
 
-              {/* Input Nom complet */}
+              {/* Input Prénom */}
+              <View style={[styles.inputWrapper, { borderColor: borderFor('prenom') }]}>
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={iconColorFor('prenom')}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Prénom *"
+                  placeholderTextColor={Colors.textTertiary}
+                  value={prenom}
+                  onChangeText={setPrenom}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  autoComplete="given-name"
+                  textContentType="givenName"
+                  spellCheck={false}
+                  returnKeyType="next"
+                  onSubmitEditing={() => nomRef.current?.focus()}
+                  onFocus={() => setFocusedInput('prenom')}
+                  onBlur={() => setFocusedInput(null)}
+                  editable={!loading}
+                  accessible
+                  accessibilityLabel="Prénom"
+                />
+              </View>
+
+              {/* Input Nom */}
               <View style={[styles.inputWrapper, { borderColor: borderFor('nom') }]}>
                 <Ionicons
                   name="person-outline"
@@ -151,15 +172,16 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   style={styles.inputIcon}
                 />
                 <TextInput
+                  ref={nomRef}
                   style={styles.input}
-                  placeholder="Nom complet"
+                  placeholder="Nom (optionnel)"
                   placeholderTextColor={Colors.textTertiary}
-                  value={nomComplet}
-                  onChangeText={setNomComplet}
+                  value={nom}
+                  onChangeText={setNom}
                   autoCapitalize="words"
                   autoCorrect={false}
-                  autoComplete="name"
-                  textContentType="name"
+                  autoComplete="family-name"
+                  textContentType="familyName"
                   spellCheck={false}
                   returnKeyType="next"
                   onSubmitEditing={() => emailRef.current?.focus()}
@@ -167,7 +189,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   onBlur={() => setFocusedInput(null)}
                   editable={!loading}
                   accessible
-                  accessibilityLabel="Nom complet"
+                  accessibilityLabel="Nom"
                 />
               </View>
 

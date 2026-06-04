@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
 import { getAllItems, getItemsByCategory } from '../../services/firestoreService';
@@ -44,6 +44,7 @@ function toMockItem(item: Item): MockItem {
     proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
     proprietaireId: item.proprietaireId ?? item.ownerId,
     description: item.description,
+    periodeMin: item.periodeMin,
   };
 }
 
@@ -109,31 +110,24 @@ export default function HomeScreen() {
 
   const [activeCategory, setActiveCategory] = useState<string>('tout');
   const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const firebaseUser = getCurrentUser();
-  const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'Ayoub';
+  const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'toi';
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-
-    const fetch = async () => {
-      let result: Item[];
-      if (activeCategory === 'tout') {
-        result = await getAllItems();
-      } else {
-        result = await getItemsByCategory(activeCategory);
-      }
-      if (!cancelled) {
-        setItems(result);
-        setLoading(false);
-      }
-    };
-
-    fetch();
-    return () => { cancelled = true; };
+  const loadItems = useCallback(async () => {
+    const result = activeCategory === 'tout'
+      ? await getAllItems()
+      : await getItemsByCategory(activeCategory);
+    setItems(result);
+    setIsInitialLoad(false);
   }, [activeCategory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadItems();
+    }, [loadItems])
+  );
 
   const cardWidth = useMemo(() => {
     const totalPadding = Layout.screenPadding * 2;
@@ -230,7 +224,7 @@ export default function HomeScreen() {
     </>
   );
 
-  if (loading) {
+  if (isInitialLoad) {
     return (
       <View style={styles.root}>
         {ListHeader}

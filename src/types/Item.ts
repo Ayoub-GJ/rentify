@@ -24,6 +24,7 @@ export interface Item {
   proprietaire?: { nom: string; initiales: string }; // Infos affichage
   actif: boolean;                // Objet disponible ou non
   datePublication: Date;         // Date de publication
+  periodeMin?: number;           // Durée minimum de location en jours (1 par défaut)
 }
 
 // Type pour créer un nouvel objet

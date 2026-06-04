@@ -8,6 +8,7 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
   Timestamp,
   serverTimestamp,
   QueryDocumentSnapshot as QDS,
@@ -15,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, storage } from '../config/firebase.config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User } from '../types';
+import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User, Message } from '../types';
 
 // ─── RentalData ───────────────────────────────────────────────
 // Format étendu stocké dans Firestore (champs dénormalisés)
@@ -56,6 +57,7 @@ export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
       proprietaire: item.proprietaire ?? null,
       disponible: item.actif,
       datePublication: Timestamp.fromDate(item.datePublication),
+      ...(item.periodeMin && item.periodeMin > 1 ? { periodeMin: item.periodeMin } : {}),
     });
     return docRef.id;
   } catch (error: any) {
@@ -242,6 +244,7 @@ function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapsho
       : data.datePublication
         ? new Date(data.datePublication)
         : new Date(),
+    periodeMin: data.periodeMin ? Number(data.periodeMin) : undefined,
   };
 }
 
@@ -316,6 +319,18 @@ export const getItemsByOwner = async (ownerId: string): Promise<Item[]> => {
 };
 
 /**
+ * Soft-delete : désactive l'annonce sans la supprimer (actif + disponible = false)
+ */
+export const softDeleteItem = async (itemId: string): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'items', itemId), { actif: false, disponible: false });
+  } catch (error) {
+    console.error('Erreur softDeleteItem:', error);
+    throw new Error("Impossible de supprimer l'annonce");
+  }
+};
+
+/**
  * Mettre à jour un objet existant
  */
 export const updateItem = async (
@@ -384,6 +399,49 @@ export const getRentalsByProprietaire = async (uid: string): Promise<RentalData[
 };
 
 /**
+ * Compter les demandes PENDING reçues sur un item
+ */
+export const countPendingRentalsForItem = async (itemId: string): Promise<number> => {
+  try {
+    const q = query(
+      collection(db, 'rentals'),
+      where('itemId', '==', itemId),
+      where('statut', '==', StatutDemande.PENDING),
+    );
+    const snap = await getDocs(q);
+    return snap.size;
+  } catch (error) {
+    console.error('Erreur countPendingRentalsForItem:', error);
+    return 0;
+  }
+};
+
+/**
+ * Récupérer la rental la plus récente d'un locataire sur un item donné
+ */
+export const getMyRentalForItem = async (
+  uid: string,
+  itemId: string,
+): Promise<RentalData | null> => {
+  if (!uid || !itemId) return null;
+  try {
+    const q = query(
+      collection(db, 'rentals'),
+      where('locataireId', '==', uid),
+      where('itemId', '==', itemId),
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const rentals = snap.docs.map(mapRentalDoc);
+    rentals.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    return rentals[0];
+  } catch (error) {
+    console.error('Erreur getMyRentalForItem:', error);
+    return null;
+  }
+};
+
+/**
  * Mettre à jour le statut d'une location
  */
 export const updateRentalStatus = async (
@@ -405,21 +463,24 @@ export const updateRentalStatus = async (
  * Récupérer un utilisateur par son uid
  */
 export const getUserById = async (uid: string): Promise<User | null> => {
+  if (!uid || typeof uid !== 'string' || uid.trim().length === 0) return null;
   try {
     const docSnap = await getDoc(doc(db, 'users', uid));
     if (!docSnap.exists()) return null;
     const data = docSnap.data();
     return {
-      id: docSnap.id,
+      uid: docSnap.id,
       email: data.email ?? '',
       nom: data.nom ?? '',
       prenom: data.prenom ?? '',
-      telephone: data.telephone ?? '',
-      ville: data.ville ?? '',
-      photoUrl: data.photoUrl,
-      dateInscription: data.dateInscription instanceof Timestamp
-        ? data.dateInscription.toDate()
-        : new Date(data.dateInscription ?? Date.now()),
+      telephone: data.telephone,
+      ville: data.ville,
+      photoURL: data.photoURL ?? data.photoUrl,
+      createdAt: data.createdAt instanceof Timestamp
+        ? data.createdAt.toDate()
+        : data.dateInscription
+          ? new Date(data.dateInscription)
+          : new Date(),
     };
   } catch (error) {
     console.error('Erreur getUserById:', error);
@@ -448,5 +509,98 @@ export const uploadItemImages = async (
   } catch (error) {
     console.error('Erreur uploadItemImages:', error);
     throw new Error('Impossible d\'uploader les images');
+  }
+};
+
+// ─── Chat / Conversations ─────────────────────────────────────
+
+/**
+ * Récupère la conversation existante entre deux users pour un item,
+ * ou en crée une nouvelle si elle n'existe pas.
+ */
+export const getOrCreateConversation = async (
+  user1Id: string,
+  user2Id: string,
+  itemId: string,
+  itemTitre: string
+): Promise<string> => {
+  try {
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', user1Id),
+      where('itemId', '==', itemId)
+    );
+    const snapshot = await getDocs(q);
+    const existing = snapshot.docs.find((d) => {
+      const participants = d.data().participants as string[];
+      return participants.includes(user2Id);
+    });
+    if (existing) return existing.id;
+
+    const docRef = await addDoc(collection(db, 'conversations'), {
+      participants: [user1Id, user2Id].sort(),
+      itemId,
+      itemTitre,
+      lastMessage: '',
+      lastMessageAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Erreur getOrCreateConversation:', error);
+    throw error;
+  }
+};
+
+/**
+ * Souscrit aux messages d'une conversation en temps réel.
+ * Retourne la fonction unsubscribe pour le cleanup useEffect.
+ */
+export const subscribeToMessages = (
+  conversationId: string,
+  callback: (messages: Message[]) => void
+): (() => void) => {
+  const q = query(
+    collection(db, 'conversations', conversationId, 'messages'),
+    orderBy('createdAt', 'asc')
+  );
+  return onSnapshot(q, (snapshot) => {
+    const messages: Message[] = snapshot.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        conversationId,
+        senderId: data.senderId ?? '',
+        texte: data.texte ?? '',
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
+        lu: data.lu ?? false,
+      };
+    });
+    callback(messages);
+  });
+};
+
+/**
+ * Envoie un message dans une conversation et met à jour le lastMessage.
+ */
+export const sendMessage = async (
+  conversationId: string,
+  senderId: string,
+  texte: string
+): Promise<void> => {
+  try {
+    await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+      senderId,
+      texte,
+      createdAt: serverTimestamp(),
+      lu: false,
+    });
+    await updateDoc(doc(db, 'conversations', conversationId), {
+      lastMessage: texte,
+      lastMessageAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Erreur sendMessage:', error);
+    throw error;
   }
 };

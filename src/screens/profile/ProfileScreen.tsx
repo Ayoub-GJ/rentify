@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUserProfile, logout } from '../../services/authService';
 import { User } from '../../types';
+import { fullName, getInitials } from '../../utils/formatters';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -118,10 +119,8 @@ export default function ProfileScreen() {
     getCurrentUserProfile().then(setUser).catch(() => {});
   }, []);
 
-  const displayName = user ? `${user.prenom} ${user.nom}` : '—';
-  const initials = user
-    ? `${user.prenom[0] ?? ''}${user.nom[0] ?? ''}`.toUpperCase()
-    : '?';
+  const displayName = user ? fullName(user) : '—';
+  const initials = getInitials(user);
 
   async function handleLogout() {
     Alert.alert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [

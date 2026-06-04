@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,29 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
+import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { StackScreenProps } from '@react-navigation/stack';
-import { LocationsStackParamList } from '../../navigation/types';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { auth } from '../../config/firebase.config';
+import { subscribeToMessages, sendMessage } from '../../services/firestoreService';
+import { Message } from '../../types';
+import {
+  HomeStackParamList,
+  SearchStackParamList,
+  LocationsStackParamList,
+} from '../../navigation/types';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 
 // ─── Types ────────────────────────────────────────────────────
 
-interface MockMessage {
+type ChatRoute = RouteProp<
+  HomeStackParamList | SearchStackParamList | LocationsStackParamList,
+  'Chat'
+>;
+
+interface DisplayMessage {
   id: string;
   texte: string;
   moi: boolean;
@@ -26,22 +38,45 @@ interface MockMessage {
   date: string;
 }
 
-// ─── Mock data ────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────
 
-const MOCK_MESSAGES: MockMessage[] = [
-  { id: '1', texte: 'Bonjour, la perceuse est encore disponible ?', moi: false, heure: '14:30', date: 'Hier' },
-  { id: '2', texte: 'Oui bien sûr ! Pour quelles dates ?', moi: true, heure: '14:32', date: 'Hier' },
-  { id: '3', texte: 'Du 1er au 4 juin, ça vous convient ?', moi: false, heure: '14:35', date: 'Hier' },
-  { id: '4', texte: 'Parfait, je confirme votre réservation.', moi: true, heure: '14:40', date: 'Hier' },
-  { id: '5', texte: 'Merci beaucoup ! À bientôt 😊', moi: false, heure: '14:41', date: 'Hier' },
-  { id: '6', texte: 'À bientôt, bonne journée !', moi: true, heure: '14:42', date: 'Hier' },
-  { id: '7', texte: 'Bonjour, je serai là à 10h pour récupérer.', moi: false, heure: '09:15', date: "Aujourd'hui" },
-  { id: '8', texte: 'Parfait, je vous attends !', moi: true, heure: '09:20', date: "Aujourd'hui" },
+const MONTH_FR = [
+  'jan.', 'fév.', 'mars', 'avr.', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
 ];
 
-// ─── Props ────────────────────────────────────────────────────
+function getDateLabel(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = today.getTime() - msgDay.getTime();
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 86400000) return 'Hier';
+  return `${date.getDate()} ${MONTH_FR[date.getMonth()]}`;
+}
 
-type Props = StackScreenProps<LocationsStackParamList, 'Chat'>;
+function getTimeLabel(date: Date): string {
+  return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function toDisplayMessage(msg: Message, currentUid: string): DisplayMessage {
+  return {
+    id: msg.id,
+    texte: msg.texte,
+    moi: msg.senderId === currentUid,
+    heure: getTimeLabel(msg.createdAt),
+    date: getDateLabel(msg.createdAt),
+  };
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter((w) => w.length > 0)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+    .slice(0, 2) || '?';
+}
 
 // ─── DateSeparator ────────────────────────────────────────────
 
@@ -57,7 +92,7 @@ function DateSeparator({ label }: { label: string }) {
 
 // ─── MessageBubble ────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: MockMessage }) {
+function MessageBubble({ msg }: { msg: DisplayMessage }) {
   if (msg.moi) {
     return (
       <View style={styles.rowRight}>
@@ -80,37 +115,48 @@ function MessageBubble({ msg }: { msg: MockMessage }) {
 
 // ─── Screen ───────────────────────────────────────────────────
 
-export default function ChatScreen({ navigation }: Props) {
+export default function ChatScreen() {
+  const navigation = useNavigation();
+  const route = useRoute<ChatRoute>();
+  const { conversationId, itemTitre, itemImage, otherUserName } = route.params;
   const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState<MockMessage[]>(MOCK_MESSAGES);
+
+  const currentUid = auth.currentUser?.uid ?? '';
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
-  function sendMessage() {
-    if (!inputText.trim()) return;
-    const newMsg: MockMessage = {
-      id: Date.now().toString(),
-      texte: inputText.trim(),
-      moi: true,
-      heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      date: "Aujourd'hui",
-    };
-    setMessages((prev) => [...prev, newMsg]);
+  useEffect(() => {
+    const unsubscribe = subscribeToMessages(conversationId, (msgs) => {
+      setMessages(msgs);
+    });
+    return () => unsubscribe();
+  }, [conversationId]);
+
+  async function handleSend() {
+    const texte = inputText.trim();
+    if (!texte || !currentUid) return;
     setInputText('');
+    await sendMessage(conversationId, currentUid, texte);
   }
 
-  // Build list items with date separators
-  type ListItem = { type: 'separator'; date: string; key: string } | { type: 'message'; msg: MockMessage; key: string };
+  // Build display list with date separators
+  type ListItem =
+    | { type: 'separator'; date: string; key: string }
+    | { type: 'message'; msg: DisplayMessage; key: string };
 
   const listItems: ListItem[] = [];
   let lastDate = '';
-  for (const msg of messages) {
+  for (const raw of messages) {
+    const msg = toDisplayMessage(raw, currentUid);
     if (msg.date !== lastDate) {
-      listItems.push({ type: 'separator', date: msg.date, key: `sep-${msg.date}` });
+      listItems.push({ type: 'separator', date: msg.date, key: `sep-${msg.date}-${raw.id}` });
       lastDate = msg.date;
     }
-    listItems.push({ type: 'message', msg, key: msg.id });
+    listItems.push({ type: 'message', msg, key: raw.id });
   }
+
+  const initials = getInitials(otherUserName);
 
   return (
     <KeyboardAvoidingView
@@ -126,31 +172,22 @@ export default function ChatScreen({ navigation }: Props) {
 
         <View style={styles.headerCenter}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>MA</Text>
+            <Text style={styles.avatarInitials}>{initials}</Text>
           </View>
           <View>
-            <Text style={styles.headerName}>Mohammed Alami</Text>
-            <Text style={styles.headerSub}>Perceuse Bosch GSB 18V</Text>
+            <Text style={styles.headerName}>{otherUserName}</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>{itemTitre}</Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.callBtn} activeOpacity={0.8}>
-          <Ionicons name="call-outline" size={22} color={Colors.primary} />
-        </TouchableOpacity>
       </View>
 
       {/* Object banner */}
       <View style={styles.banner}>
-        <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=400' }}
-          style={styles.bannerImage}
-          resizeMode="cover"
-        />
+        <SmartImage uri={itemImage} style={styles.bannerImage} resizeMode="cover" />
         <View style={styles.bannerInfo}>
-          <Text style={styles.bannerTitle} numberOfLines={1}>Perceuse Bosch GSB 18V</Text>
-          <Text style={styles.bannerDates}>1 juin → 4 juin · 3 jours</Text>
+          <Text style={styles.bannerTitle} numberOfLines={1}>{itemTitre}</Text>
         </View>
-        <Text style={styles.bannerPrice}>75 MAD</Text>
       </View>
 
       {/* Messages */}
@@ -183,9 +220,9 @@ export default function ChatScreen({ navigation }: Props) {
           placeholderTextColor={Colors.textTertiary}
           multiline={false}
           returnKeyType="send"
-          onSubmitEditing={sendMessage}
+          onSubmitEditing={handleSend}
         />
-        <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} activeOpacity={0.8}>
           <Ionicons name="send" size={20} color={Colors.textInverse} />
         </TouchableOpacity>
       </View>
@@ -277,17 +314,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontHeading,
     fontSize: 13,
     color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  bannerDates: {
-    fontFamily: Typography.fontBody,
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  bannerPrice: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: 14,
-    color: Colors.primary,
   },
 
   // Messages list

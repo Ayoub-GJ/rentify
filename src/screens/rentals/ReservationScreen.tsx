@@ -155,6 +155,14 @@ export default function ReservationScreen() {
   async function handleConfirm() {
     if (!auth.currentUser || !startDate || !endDate) return;
 
+    if (item.periodeMin && duration < item.periodeMin) {
+      Alert.alert(
+        'Durée trop courte',
+        `Cet objet doit être loué pour au moins ${item.periodeMin} jours.`,
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const fullItem = await getItemById(item.id);

@@ -49,7 +49,7 @@ export default function MainTabNavigator() {
         component={HomeStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Home';
-          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat';
           return {
             tabBarLabel: 'Accueil',
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
@@ -64,7 +64,7 @@ export default function MainTabNavigator() {
         component={SearchStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'SearchScreen';
-          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat';
           return {
             tabBarLabel: 'Recherche',
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
@@ -93,7 +93,7 @@ export default function MainTabNavigator() {
         component={LocationsStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'MesLocations';
-          const hideTabBar = focusedRoute === 'Chat';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat';
           return {
             tabBarLabel: 'Locations',
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (

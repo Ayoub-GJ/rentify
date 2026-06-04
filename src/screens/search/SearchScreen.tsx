@@ -14,7 +14,7 @@ import {
 import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Slider from '@react-native-community/slider';
 import { getAllItems } from '../../services/firestoreService';
@@ -37,6 +37,7 @@ function toMockItem(item: Item): MockItem {
     proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
     proprietaireId: item.proprietaireId ?? item.ownerId,
     description: item.description,
+    periodeMin: item.periodeMin,
   };
 }
 import {
@@ -113,7 +114,7 @@ export default function SearchScreen() {
   const openFiltersParam: boolean = route?.params?.openFilters ?? false;
 
   const [allItems, setAllItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('tout');
   const [activeSort, setActiveSort] = useState<SortOption>('proximite');
@@ -121,12 +122,14 @@ export default function SearchScreen() {
   const [pendingFilters, setPendingFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    getAllItems().then((result) => {
-      setAllItems(result);
-      setLoading(false);
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getAllItems().then((result) => {
+        setAllItems(result);
+        setIsInitialLoad(false);
+      });
+    }, [])
+  );
 
   useEffect(() => {
     if (openFiltersParam) setShowFilters(true);
@@ -249,7 +252,7 @@ export default function SearchScreen() {
       {/* Stats + Sort — directement après les chips, pas de gap */}
       <View style={styles.statsRow}>
         <Text style={styles.statsCount}>
-          <Text style={styles.statsCountNum}>{loading ? '–' : filteredItems.length}</Text> objets disponibles
+          <Text style={styles.statsCountNum}>{isInitialLoad ? '–' : filteredItems.length}</Text> objets disponibles
         </Text>
         <View style={styles.sortChips}>
           {SORT_OPTIONS.map((s) => {
@@ -271,8 +274,8 @@ export default function SearchScreen() {
       </View>
 
       {/* Results — flex: 1 pour remplir l'espace restant sans créer de gap */}
-      {loading ? (
-        <View style={styles.loadingState}>
+      {isInitialLoad ? (
+        <View style={styles.isInitialLoadState}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : (
@@ -552,7 +555,7 @@ const styles = StyleSheet.create({
   },
 
   // Loading state
-  loadingState: {
+  isInitialLoadState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',

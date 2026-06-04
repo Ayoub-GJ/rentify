@@ -4,6 +4,7 @@ import { SearchStackParamList } from './types';
 import SearchScreen from '../screens/search/SearchScreen';
 import ItemDetailScreen from '../screens/items/ItemDetailScreen';
 import ReservationScreen from '../screens/rentals/ReservationScreen';
+import ChatScreen from '../screens/chat/ChatScreen';
 
 const Stack = createStackNavigator<SearchStackParamList>();
 
@@ -13,6 +14,7 @@ export default function SearchStackNavigator() {
       <Stack.Screen name="SearchScreen" component={SearchScreen} />
       <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
       <Stack.Screen name="Reservation" component={ReservationScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
     </Stack.Navigator>
   );
 }

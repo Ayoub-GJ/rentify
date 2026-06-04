@@ -3,255 +3,509 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, TabActions } from '@react-navigation/native';
 import { auth } from '../../config/firebase.config';
 import {
   getRentalsByLocataire,
   getRentalsByProprietaire,
   updateRentalStatus,
   getUserById,
+  getItemById,
+  getItemsByOwner,
+  getOrCreateConversation,
   RentalData,
 } from '../../services/firestoreService';
-import { StatutDemande } from '../../types';
+import { StatutDemande, Item, User } from '../../types';
+import { MockItem } from '../../data/mockItems';
 import { LocationsStackParamList } from '../../navigation/types';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
+import {
+  Colors,
+  Typography,
+  Spacing,
+  Radius,
+  Shadows,
+  RentalStatusConfig,
+} from '../../theme/theme';
+import {
+  fullName,
+  shortName,
+  getInitials,
+  avatarColorFromUid,
+  formatDateRange,
+} from '../../utils/formatters';
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+function toMockItem(item: Item): MockItem {
+  return {
+    id: item.id,
+    titre: item.titre,
+    categorie: item.categorie,
+    ville: item.ville,
+    prixParJour: item.prixParJour,
+    disponible: item.actif,
+    distance: 0,
+    images: item.images && item.images.length > 0
+      ? item.images
+      : item.photoUrl ? [item.photoUrl] : [],
+    note: 0,
+    avis: 0,
+    proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
+    proprietaireId: item.proprietaireId,
+    description: item.description,
+    periodeMin: item.periodeMin,
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────
 
-type RentalWithUser = RentalData & { locataireNom?: string };
-
-// ─── Helpers ──────────────────────────────────────────────────
-
-const MONTH_FR = [
-  'jan.', 'fév.', 'mars', 'avr.', 'mai', 'juin',
-  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
-];
-
-function formatDate(date: Date): string {
-  return `${date.getDate()} ${MONTH_FR[date.getMonth()]}`;
-}
-
-const STATUT_CONFIG: Record<StatutDemande, { label: string; bg: string; color: string }> = {
-  PENDING:   { label: 'En attente', bg: Colors.pendingBg,   color: Colors.pending },
-  ACCEPTED:  { label: 'Acceptée',   bg: Colors.acceptedBg,  color: Colors.accepted },
-  REJECTED:  { label: 'Refusée',    bg: Colors.rejectedBg,  color: Colors.rejected },
-  COMPLETED: { label: 'Terminée',   bg: Colors.completedBg, color: Colors.completed },
-  CANCELLED: { label: 'Annulée',    bg: Colors.cancelledBg, color: Colors.cancelled },
-};
-
-// ─── RentalCard ───────────────────────────────────────────────
-
+type Tab = 'encours' | 'annonces' | 'demandes';
+type RentalWithOther = RentalData & { otherUser: User | null };
 type NavProp = StackScreenProps<LocationsStackParamList, 'MesLocations'>['navigation'];
 
-interface RentalCardProps {
-  rental: RentalWithUser;
-  isProprietaire: boolean;
-  navigation: NavProp;
-  onAccept: (id: string) => void;
-  onReject: (id: string) => void;
-}
+// ─── StatusBadge ──────────────────────────────────────────────
 
-function RentalCard({ rental, isProprietaire, navigation, onAccept, onReject }: RentalCardProps) {
-  const cfg = STATUT_CONFIG[rental.statut];
-
+function StatusBadge({ statut }: { statut: StatutDemande }) {
+  const cfg = RentalStatusConfig[statut];
   return (
-    <View style={styles.card}>
-      {/* Top row */}
-      <View style={styles.cardTop}>
-        <SmartImage uri={rental.itemImage} style={styles.cardImage} resizeMode="cover" />
-        <View style={styles.cardContent}>
-          {isProprietaire && rental.locataireNom && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
-              <Text style={{ fontSize: 12, color: Colors.textSecondary, fontFamily: Typography.fontBody }}>
-                Demande de {rental.locataireNom}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.cardTitle} numberOfLines={1}>{rental.itemTitre}</Text>
-          <View style={styles.cardDateRow}>
-            <Ionicons name="calendar-outline" size={12} color={Colors.textSecondary} />
-            <Text style={styles.cardDate}>
-              {' '}{formatDate(rental.dateDebut)} → {formatDate(rental.dateFin)} · {rental.jours} jour{rental.jours > 1 ? 's' : ''}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
-          <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
-        </View>
-      </View>
-
-      {/* Footer */}
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardPrice}>{rental.prixTotal} MAD</Text>
-
-        <View style={styles.footerActions}>
-          {/* Boutons propriétaire : PENDING → Accepter / Refuser */}
-          {isProprietaire && rental.statut === StatutDemande.PENDING && (
-            <>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnAccept]}
-                onPress={() => onAccept(rental.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.actionBtnText, { color: Colors.accepted }]}>Accepter</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnRed]}
-                onPress={() => onReject(rental.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.actionBtnText, { color: Colors.error }]}>Refuser</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Boutons locataire */}
-          {!isProprietaire && rental.statut === StatutDemande.PENDING && (
-            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRed]} activeOpacity={0.8}>
-              <Text style={[styles.actionBtnText, { color: Colors.error }]}>Annuler</Text>
-            </TouchableOpacity>
-          )}
-          {rental.statut === StatutDemande.ACCEPTED && (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnOrange]}
-              onPress={() => navigation.navigate('Chat', { rentalId: rental.id })}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Contacter</Text>
-            </TouchableOpacity>
-          )}
-          {!isProprietaire && rental.statut === StatutDemande.COMPLETED && (
-            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOrange]} activeOpacity={0.8}>
-              <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Évaluer</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+    <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
+      <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   );
 }
 
-// ─── Section ──────────────────────────────────────────────────
+// ─── Tab 1 — LocationCard ─────────────────────────────────────
 
-interface SectionProps {
-  title: string;
-  rentals: RentalWithUser[];
-  isProprietaire: boolean;
+function LocationCard({
+  rental,
+  navigation,
+}: {
+  rental: RentalWithOther;
+  navigation: NavProp;
+}) {
+  const [contacting, setContacting] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+
+  async function handlePress() {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      const item = await getItemById(rental.itemId);
+      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
+    } catch {
+      Alert.alert('Erreur', 'Impossible de charger cet objet.');
+    } finally {
+      setNavigating(false);
+    }
+  }
+
+  async function handleContact() {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !rental.proprietaireId) return;
+    setContacting(true);
+    try {
+      const user = await getUserById(rental.proprietaireId);
+      const conversationId = await getOrCreateConversation(
+        uid,
+        rental.proprietaireId,
+        rental.itemId,
+        rental.itemTitre,
+      );
+      navigation.navigate('Chat', {
+        conversationId,
+        itemTitre: rental.itemTitre,
+        itemImage: rental.itemImage,
+        otherUserName: fullName(user),
+      });
+    } catch {
+      Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
+    } finally {
+      setContacting(false);
+    }
+  }
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, navigating && { opacity: 0.7 }]}
+      onPress={handlePress}
+      activeOpacity={0.75}
+    >
+      <View style={styles.cardRow}>
+        <SmartImage uri={rental.itemImage} style={styles.cardThumb} resizeMode="cover" />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTopRow}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{rental.itemTitre}</Text>
+            <StatusBadge statut={rental.statut} />
+          </View>
+          <Text style={styles.cardDates}>
+            {formatDateRange(rental.dateDebut, rental.dateFin)}
+          </Text>
+          {rental.otherUser && (
+            <Text style={styles.cardMeta}>
+              par {shortName(rental.otherUser)}
+            </Text>
+          )}
+          <Text style={styles.cardPrice}>{rental.prixTotal} MAD</Text>
+        </View>
+      </View>
+
+      {rental.statut === StatutDemande.ACCEPTED && (
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={[styles.btnGreen, contacting && { opacity: 0.6 }]}
+            onPress={handleContact}
+            disabled={contacting}
+            activeOpacity={0.8}
+          >
+            {contacting
+              ? <ActivityIndicator size="small" color={Colors.textInverse} />
+              : <Text style={styles.btnGreenText}>Contacter</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ─── Tab 1 — EnCoursTab ───────────────────────────────────────
+
+function EnCoursTab({
+  rentals,
+  navigation,
+}: {
+  rentals: RentalWithOther[];
+  navigation: NavProp;
+}) {
+  const active = rentals.filter(
+    (r) => r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED,
+  );
+  const passees = rentals.filter(
+    (r) =>
+      r.statut === StatutDemande.COMPLETED ||
+      r.statut === StatutDemande.CANCELLED ||
+      r.statut === StatutDemande.REJECTED,
+  );
+
+  if (rentals.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="calendar-outline" size={52} color={Colors.textTertiary} />
+        <Text style={styles.emptyTitle}>Aucune location en cours</Text>
+        <Text style={styles.emptySubtitle}>Vos demandes de location apparaîtront ici</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.tabContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {active.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>Actives</Text>
+          {active.map((r) => (
+            <LocationCard key={r.id} rental={r} navigation={navigation} />
+          ))}
+        </>
+      )}
+      {passees.length > 0 && (
+        <>
+          <Text style={[styles.sectionLabel, active.length > 0 && { marginTop: Spacing.xl }]}>
+            Passées
+          </Text>
+          {passees.map((r) => (
+            <LocationCard key={r.id} rental={r} navigation={navigation} />
+          ))}
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+// ─── Tab 2 — AnnonceCard ──────────────────────────────────────
+
+function AnnonceCard({ item, navigation }: { item: Item; navigation: NavProp }) {
+  const imageUri =
+    item.images && item.images.length > 0 ? item.images[0] : item.photoUrl;
+
+  return (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate('ItemDetail', { item: toMockItem(item) })}
+      activeOpacity={0.75}
+    >
+      <View style={styles.cardRow}>
+        <SmartImage uri={imageUri} style={styles.cardThumb} resizeMode="cover" />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTopRow}>
+            <Text style={styles.cardTitle} numberOfLines={2}>{item.titre}</Text>
+            {item.actif && (
+              <View style={[styles.badge, { backgroundColor: Colors.acceptedBg }]}>
+                <Text style={[styles.badgeText, { color: Colors.accepted }]}>Actif</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.cardPrice}>{item.prixParJour} MAD/j</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Tab 2 — AnnoncesTab ─────────────────────────────────────
+
+function AnnoncesTab({
+  items,
+  navigation,
+}: {
+  items: Item[];
+  navigation: NavProp;
+}) {
+  function handleAddItem() {
+    (navigation as any).getParent()?.dispatch(TabActions.jumpTo('AddItem'));
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.tabContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* CTA */}
+      <TouchableOpacity style={styles.ctaButton} onPress={handleAddItem} activeOpacity={0.8}>
+        <Ionicons name="add-circle-outline" size={22} color={Colors.primary} />
+        <Text style={styles.ctaText}>Mettre un objet en location</Text>
+      </TouchableOpacity>
+
+      {items.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="cube-outline" size={52} color={Colors.textTertiary} />
+          <Text style={styles.emptyTitle}>Aucune annonce</Text>
+          <Text style={styles.emptySubtitle}>Cliquez sur + pour publier votre premier objet</Text>
+        </View>
+      ) : (
+        items.map((item) => <AnnonceCard key={item.id} item={item} navigation={navigation} />)
+      )}
+    </ScrollView>
+  );
+}
+
+// ─── Tab 3 — DemandeCard ──────────────────────────────────────
+
+function DemandeCard({
+  rental,
+  navigation,
+  onAccept,
+  onReject,
+}: {
+  rental: RentalWithOther;
   navigation: NavProp;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
+}) {
+  const [navigating, setNavigating] = useState(false);
+  const locataire = rental.otherUser;
+  const initiales = getInitials(locataire);
+  const avatarColor = avatarColorFromUid(rental.locataireId);
+  const titre = locataire
+    ? `${shortName(locataire)} veut louer`
+    : 'Quelqu\'un veut louer';
+
+  async function handlePress() {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      const item = await getItemById(rental.itemId);
+      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
+    } catch {
+      Alert.alert('Erreur', 'Impossible de charger cet objet.');
+    } finally {
+      setNavigating(false);
+    }
+  }
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, navigating && { opacity: 0.7 }]}
+      onPress={handlePress}
+      activeOpacity={0.75}
+    >
+      {/* Header : avatar + nom + badge */}
+      <View style={styles.demandeHeader}>
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <Text style={styles.avatarText}>{initiales}</Text>
+        </View>
+        <View style={styles.demandeInfo}>
+          <Text style={styles.demandeTitre} numberOfLines={1}>{titre}</Text>
+          <Text style={styles.demandeObjet} numberOfLines={1}>{rental.itemTitre}</Text>
+        </View>
+        <View style={[styles.badge, { backgroundColor: Colors.pendingBg }]}>
+          <Text style={[styles.badgeText, { color: Colors.pending }]}>En attente</Text>
+        </View>
+      </View>
+
+      {/* Message locataire */}
+      {!!rental.message && (
+        <View style={styles.messageBox}>
+          <Text style={styles.messageText}>« {rental.message} »</Text>
+        </View>
+      )}
+
+      {/* Dates + prix */}
+      <View style={styles.demandeMeta}>
+        <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+        <Text style={styles.demandeMetaText}>
+          {formatDateRange(rental.dateDebut, rental.dateFin)}
+          {' · '}{rental.prixTotal} MAD
+        </Text>
+      </View>
+
+      {/* Actions */}
+      <View style={styles.demandeActions}>
+        <TouchableOpacity
+          style={styles.btnRefuser}
+          onPress={() => onReject(rental.id)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.btnRefuserText}>Refuser</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.btnAccepter}
+          onPress={() => onAccept(rental.id)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+          <Text style={styles.btnAccepterText}>Accepter</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
-function Section({ title, rentals, isProprietaire, navigation, onAccept, onReject }: SectionProps) {
+// ─── Tab 3 — DemandesTab ─────────────────────────────────────
+
+function DemandesTab({
+  demandes,
+  navigation,
+  onAccept,
+  onReject,
+}: {
+  demandes: RentalWithOther[];
+  navigation: NavProp;
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  if (demandes.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="notifications-outline" size={52} color={Colors.textTertiary} />
+        <Text style={styles.emptyTitle}>Aucune nouvelle demande</Text>
+        <Text style={styles.emptySubtitle}>Les demandes de location apparaîtront ici</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {rentals.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="receipt-outline" size={48} color={Colors.textTertiary} />
-          <Text style={styles.emptyText}>Aucune location pour l'instant</Text>
-        </View>
-      ) : (
-        rentals.map((r) => (
-          <RentalCard
-            key={r.id}
-            rental={r}
-            isProprietaire={isProprietaire}
-            navigation={navigation}
-            onAccept={onAccept}
-            onReject={onReject}
-          />
-        ))
-      )}
-    </View>
+    <ScrollView
+      contentContainerStyle={styles.tabContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {demandes.map((r) => (
+        <DemandeCard key={r.id} rental={r} navigation={navigation} onAccept={onAccept} onReject={onReject} />
+      ))}
+    </ScrollView>
   );
 }
 
 // ─── Screen ───────────────────────────────────────────────────
 
-type Tab = 'encours' | 'historique';
 type Props = StackScreenProps<LocationsStackParamList, 'MesLocations'>;
 
-const HISTORIQUE_STATUTS = [StatutDemande.REJECTED, StatutDemande.CANCELLED, StatutDemande.COMPLETED];
-
-export default function MesLocationsScreen({ navigation }: Props) {
+export default function MesLocationsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<Tab>('encours');
-  const [demandesEnvoyees, setDemandesEnvoyees] = useState<RentalWithUser[]>([]);
-  const [demandesRecues, setDemandesRecues] = useState<RentalWithUser[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>(route.params?.initialTab ?? 'encours');
   const [loading, setLoading] = useState(true);
+  const [mesLocations, setMesLocations] = useState<RentalWithOther[]>([]);
+  const [mesItems, setMesItems] = useState<Item[]>([]);
+  const [demandesRecues, setDemandesRecues] = useState<RentalWithOther[]>([]);
   const isFirstLoad = useRef(true);
 
-  const loadRentals = useCallback(async () => {
-    const user = auth.currentUser;
-    if (!user) { setLoading(false); return; }
+  const loadData = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setLoading(false); return; }
+    if (isFirstLoad.current) setLoading(true);
 
-    if (isFirstLoad.current) {
-      setLoading(true);
-    }
-
-    const [envoyees, recues] = await Promise.all([
-      getRentalsByLocataire(user.uid),
-      getRentalsByProprietaire(user.uid),
+    const [envoyees, items, recues] = await Promise.all([
+      getRentalsByLocataire(uid),
+      getItemsByOwner(uid),
+      getRentalsByProprietaire(uid),
     ]);
 
-    console.log('Rentals as proprietaire:', recues.length, 'for uid:', user.uid);
+    const [envoyeesWithOther, recuesPendingWithOther] = await Promise.all([
+      Promise.all(
+        envoyees.map(async (r) => ({
+          ...r,
+          otherUser: r.proprietaireId ? await getUserById(r.proprietaireId) : null,
+        })),
+      ),
+      Promise.all(
+        recues
+          .filter((r) => r.statut === StatutDemande.PENDING && r.locataireId && r.locataireId.length > 0)
+          .map(async (r) => ({
+            ...r,
+            otherUser: await getUserById(r.locataireId),
+          })),
+      ),
+    ]);
 
-    const recuesWithUsers = await Promise.all(
-      recues.map(async (r) => {
-        const locataire = await getUserById(r.locataireId);
-        const nom = locataire
-          ? `${locataire.prenom} ${locataire.nom}`.trim() || locataire.nom || 'Utilisateur'
-          : 'Utilisateur';
-        return { ...r, locataireNom: nom };
-      })
-    );
-
-    setDemandesEnvoyees(envoyees);
-    setDemandesRecues(recuesWithUsers);
+    setMesLocations(envoyeesWithOther);
+    setMesItems(items);
+    setDemandesRecues(recuesPendingWithOther);
     setLoading(false);
     isFirstLoad.current = false;
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadRentals();
-    }, [loadRentals])
+      loadData();
+    }, [loadData]),
   );
 
-  const handleAccept = useCallback(async (rentalId: string) => {
-    await updateRentalStatus(rentalId, StatutDemande.ACCEPTED);
-    loadRentals();
-  }, [loadRentals]);
+  const handleAccept = useCallback(
+    async (rentalId: string) => {
+      await updateRentalStatus(rentalId, StatutDemande.ACCEPTED);
+      loadData();
+    },
+    [loadData],
+  );
 
-  const handleReject = useCallback(async (rentalId: string) => {
-    await updateRentalStatus(rentalId, StatutDemande.REJECTED);
-    loadRentals();
-  }, [loadRentals]);
+  const handleReject = useCallback(
+    async (rentalId: string) => {
+      await updateRentalStatus(rentalId, StatutDemande.REJECTED);
+      loadData();
+    },
+    [loadData],
+  );
 
-  // Filtrage par onglet
-  const isHistorique = (r: RentalWithUser) => HISTORIQUE_STATUTS.includes(r.statut);
-  const isEnCours = (r: RentalWithUser) => !isHistorique(r);
+  const enCoursCount = mesLocations.filter(
+    (r) => r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED,
+  ).length;
 
-  const filter = activeTab === 'encours' ? isEnCours : isHistorique;
-  const demandes = demandesEnvoyees.filter(filter);
-  const annonces = demandesRecues.filter(filter);
-
-  const listData = [
-    { key: 'demandes', title: 'Mes demandes', rentals: demandes, isProprietaire: false },
-    { key: 'annonces', title: 'Mes annonces', rentals: annonces, isProprietaire: true },
+  const TABS: { id: Tab; label: string; count: number }[] = [
+    { id: 'encours',  label: 'En cours',      count: enCoursCount },
+    { id: 'annonces', label: 'Mes annonces',  count: mesItems.length },
+    { id: 'demandes', label: 'Demandes',      count: demandesRecues.length },
   ];
-
-  const totalCount = demandesEnvoyees.length + demandesRecues.length;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -260,21 +514,29 @@ export default function MesLocationsScreen({ navigation }: Props) {
         <Text style={styles.headerTitle}>Mes locations</Text>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsBar}>
-        {(['encours', 'historique'] as Tab[]).map((tab) => {
-          const active = activeTab === tab;
-          const label = tab === 'encours' ? 'En cours' : 'Historique';
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.id;
           return (
             <TouchableOpacity
-              key={tab}
+              key={tab.id}
               style={[styles.tabItem, active && styles.tabItemActive]}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => setActiveTab(tab.id)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-                {label}
-              </Text>
+              <View style={styles.tabInner}>
+                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                  {tab.label}
+                </Text>
+                {tab.count > 0 && (
+                  <View style={[styles.tabCount, active && styles.tabCountActive]}>
+                    <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
+                      {tab.count}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -285,28 +547,23 @@ export default function MesLocationsScreen({ navigation }: Props) {
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
-      ) : totalCount === 0 ? (
-        <View style={styles.globalEmpty}>
-          <Ionicons name="calendar-outline" size={56} color={Colors.textTertiary} />
-          <Text style={styles.globalEmptyText}>Aucune location pour le moment</Text>
-        </View>
       ) : (
-        <FlatList
-          data={listData}
-          keyExtractor={(item) => item.key}
-          renderItem={({ item }) => (
-            <Section
-              title={item.title}
-              rentals={item.rentals}
-              isProprietaire={item.isProprietaire}
+        <>
+          <View style={[styles.tabPane, activeTab !== 'encours' && styles.tabHidden]}>
+            <EnCoursTab rentals={mesLocations} navigation={navigation} />
+          </View>
+          <View style={[styles.tabPane, activeTab !== 'annonces' && styles.tabHidden]}>
+            <AnnoncesTab items={mesItems} navigation={navigation} />
+          </View>
+          <View style={[styles.tabPane, activeTab !== 'demandes' && styles.tabHidden]}>
+            <DemandesTab
+              demandes={demandesRecues}
               navigation={navigation}
               onAccept={handleAccept}
               onReject={handleReject}
             />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+          </View>
+        </>
       )}
     </View>
   );
@@ -320,7 +577,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
 
-  // Header
+  // ── Header ──
   header: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
@@ -333,8 +590,8 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
 
-  // Tabs
-  tabsBar: {
+  // ── Tab bar ──
+  tabBar: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
@@ -342,163 +599,313 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
-    height: 44,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabItemActive: {
     borderBottomColor: Colors.primary,
   },
+  tabInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   tabLabel: {
     fontFamily: Typography.fontBody,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textTertiary,
   },
   tabLabelActive: {
     fontFamily: Typography.fontHeading,
     color: Colors.primary,
   },
+  tabCount: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  tabCountActive: {
+    backgroundColor: Colors.primaryXLight,
+  },
+  tabCountText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 10,
+    color: Colors.textTertiary,
+  },
+  tabCountTextActive: {
+    color: Colors.primary,
+  },
 
-  // Loading
+  // ── Loading ──
   loadingState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // Global empty
-  globalEmpty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-  },
-  globalEmptyText: {
-    fontFamily: Typography.fontBody,
-    fontSize: 15,
-    color: Colors.textTertiary,
-  },
-
-  // List
-  listContent: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
+  // ── Tab scroll content ──
+  tabContent: {
+    padding: Spacing.lg,
     paddingBottom: Spacing['6xl'],
+    gap: Spacing.md,
   },
 
-  // Section
-  section: {
-    marginBottom: Spacing.xl,
-  },
-  sectionTitle: {
+  // ── Section label ──
+  sectionLabel: {
     fontFamily: Typography.fontHeading,
-    fontSize: 15,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.md,
-  },
-
-  // Empty state (per section)
-  empty: {
-    alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
-    gap: Spacing.sm,
-  },
-  emptyText: {
-    fontFamily: Typography.fontBody,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.xs,
+    marginLeft: 2,
   },
 
-  // Card
+  // ── Card base ──
   card: {
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
-    marginBottom: Spacing.md,
     ...Shadows.card,
   },
-  cardTop: {
+  cardRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: Spacing.md,
   },
-  cardImage: {
-    width: 64,
-    height: 64,
+  cardThumb: {
+    width: 68,
+    height: 68,
     borderRadius: Radius.md,
+    flexShrink: 0,
   },
-  cardContent: {
+  cardBody: {
     flex: 1,
-    marginLeft: Spacing.md,
-    marginRight: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
   cardTitle: {
+    flex: 1,
     fontFamily: Typography.fontHeading,
     fontSize: 15,
     color: Colors.textPrimary,
-    marginBottom: 6,
   },
-  cardDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardDate: {
+  cardDates: {
     fontFamily: Typography.fontBody,
     fontSize: 13,
     color: Colors.textSecondary,
   },
+  cardMeta: {
+    fontFamily: Typography.fontBody,
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+  cardPrice: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: 15,
+    color: Colors.primary,
+  },
 
-  // Badge
+  // ── Card actions (Tab 1 ACCEPTED) ──
+  cardActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  btnGreen: {
+    flex: 1,
+    height: 36,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnGreenText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 13,
+    color: Colors.textInverse,
+  },
+  btnOutline: {
+    flex: 1,
+    height: 36,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnOutlineText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+
+  // ── Badge ──
   badge: {
     borderRadius: Radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
     alignSelf: 'flex-start',
+    flexShrink: 0,
   },
   badgeText: {
     fontFamily: Typography.fontSubheading,
     fontSize: 11,
   },
 
-  // Card footer
-  cardFooter: {
+  // ── CTA button (Tab 2) ──
+  ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderStyle: 'dashed',
+    paddingVertical: Spacing.lg,
+    backgroundColor: Colors.primaryXLight,
   },
-  cardPrice: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: 16,
+  ctaText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
     color: Colors.primary,
   },
-  footerActions: {
+
+  // ── Demande card ──
+  demandeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  avatarText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textInverse,
+  },
+  demandeInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  demandeTitre: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 15,
+    color: Colors.textPrimary,
+  },
+  demandeObjet: {
+    fontFamily: Typography.fontBody,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  messageBox: {
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  messageText: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  demandeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  demandeMetaText: {
+    fontFamily: Typography.fontBody,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  demandeActions: {
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-
-  // Action buttons
-  actionBtn: {
+  btnRefuser: {
+    flex: 4,
+    height: 40,
     borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 6,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionBtnRed: {
-    borderColor: Colors.error,
-  },
-  actionBtnOrange: {
-    borderColor: Colors.primary,
-  },
-  actionBtnAccept: {
-    borderColor: Colors.accepted,
-  },
-  actionBtnText: {
+  btnRefuserText: {
     fontFamily: Typography.fontBodyMedium,
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  btnAccepter: {
+    flex: 6,
+    height: 40,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    ...Shadows.sm,
+  },
+  btnAccepterText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 14,
+    color: Colors.textInverse,
+  },
+
+  // ── Tab panes (always mounted, hidden when inactive) ──
+  tabPane: {
+    flex: 1,
+  },
+  tabHidden: {
+    display: 'none',
+  },
+
+  // ── Empty states ──
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing['6xl'],
+    gap: Spacing.md,
+  },
+  emptyTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontFamily: Typography.fontBody,
     fontSize: 13,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+    paddingHorizontal: Spacing['2xl'],
   },
 });

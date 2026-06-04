@@ -16,12 +16,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, TabActions } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, TabActions, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { getDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase.config';
-import { createItem, uploadItemImages, updateItem } from '../../services/firestoreService';
+import {
+  createItem,
+  uploadItemImages,
+  updateItem,
+  getItemById,
+  softDeleteItem,
+} from '../../services/firestoreService';
 import { Categorie } from '../../types';
+import { fullName, getInitials } from '../../utils/formatters';
 import {
   Colors,
   Typography,
@@ -31,6 +38,7 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
+import { MainTabParamList } from '../../navigation/types';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -41,7 +49,18 @@ interface FormData {
   categorie: string;
   prixParJour: string;
   ville: string;
+  periodeMin: string;
 }
+
+const EMPTY_FORM: FormData = {
+  photos: [],
+  titre: '',
+  description: '',
+  categorie: '',
+  prixParJour: '',
+  ville: '',
+  periodeMin: '1',
+};
 
 // ─── StepIndicator ────────────────────────────────────────────
 
@@ -87,32 +106,76 @@ function StepIndicator({ current }: { current: number }) {
 
 export default function AddItemScreen() {
   const navigation = useNavigation();
+  const route = useRoute<RouteProp<MainTabParamList, 'AddItem'>>();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
 
-  const [formData, setFormData] = useState<FormData>({
-    photos: [],
-    titre: '',
-    description: '',
-    categorie: '',
-    prixParJour: '',
-    ville: '',
-  });
+  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [currentStep, setCurrentStep] = useState(1);
   const [uploading, setUploading] = useState(false);
+  const [loadingItem, setLoadingItem] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  // Tracks which itemId we've already loaded to avoid reloading on every focus
+  const loadedItemIdRef = useRef<string | null>(null);
+
+  const isEditMode = editingItemId !== null;
+
+  useFocusEffect(
+    useCallback(() => {
+      const itemId = route.params?.itemId ?? null;
+
+      if (itemId) {
+        // Edit mode: only load if different item
+        if (loadedItemIdRef.current !== itemId) {
+          loadedItemIdRef.current = itemId;
+          setEditingItemId(itemId);
+          setCurrentStep(1);
+          slideAnim.setValue(0);
+          setLoadingItem(true);
+          getItemById(itemId).then((item) => {
+            if (item) {
+              setFormData({
+                photos: item.images && item.images.length > 0 ? item.images : item.photoUrl ? [item.photoUrl] : [],
+                titre: item.titre,
+                description: item.description ?? '',
+                categorie: item.categorie ?? '',
+                prixParJour: String(item.prixParJour),
+                ville: item.ville,
+                periodeMin: String(item.periodeMin ?? 1),
+              });
+            }
+            setLoadingItem(false);
+          });
+        }
+      } else {
+        // Create mode: reset every time we land here fresh
+        if (loadedItemIdRef.current !== null) {
+          loadedItemIdRef.current = null;
+        }
+        setEditingItemId(null);
+        setFormData(EMPTY_FORM);
+        setCurrentStep(1);
+        setUploading(false);
+        slideAnim.setValue(0);
+      }
+    }, [route.params?.itemId, slideAnim]),
+  );
 
   const chipWidth = (screenWidth - Layout.screenPadding * 2 - Spacing.md) / 2;
 
   // ── Navigation ──
 
   function goBack() {
-    navigation.dispatch(TabActions.jumpTo('Home'));
+    if (isEditMode) {
+      navigation.goBack();
+    } else {
+      navigation.dispatch(TabActions.jumpTo('Home'));
+    }
   }
 
   function goToStep(nextStep: number) {
     const direction = nextStep > currentStep ? 1 : -1;
-
     Animated.timing(slideAnim, {
       toValue: direction * -screenWidth,
       duration: 220,
@@ -152,7 +215,12 @@ export default function AddItemScreen() {
         return false;
       }
       if (formData.ville.trim().length < 2) {
-        Alert.alert('Ville manquante', 'Entre la ville où se trouve l\'objet.');
+        Alert.alert('Ville manquante', "Entre la ville où se trouve l'objet.");
+        return false;
+      }
+      const pm = parseInt(formData.periodeMin, 10);
+      if (!formData.periodeMin || isNaN(pm) || pm < 1) {
+        Alert.alert('Période invalide', 'La période minimum doit être au moins 1 jour.');
         return false;
       }
     }
@@ -182,21 +250,14 @@ export default function AddItemScreen() {
     }));
   }
 
-  // ── Publish ──
+  // ── Submit (create or update) ──
 
-  async function publish() {
+  async function handleSubmit() {
     if (!auth.currentUser) {
-      Alert.alert('Erreur', 'Vous devez être connecté pour publier.');
+      Alert.alert('Erreur', 'Vous devez être connecté.');
       return;
     }
-
-    if (
-      !formData.titre.trim() ||
-      !formData.description.trim() ||
-      !formData.prixParJour ||
-      !formData.categorie ||
-      !formData.ville.trim()
-    ) {
+    if (!formData.titre.trim() || !formData.description.trim() || !formData.prixParJour || !formData.categorie || !formData.ville.trim()) {
       Alert.alert('Champs manquants', 'Remplis tous les champs obligatoires.');
       return;
     }
@@ -204,44 +265,96 @@ export default function AddItemScreen() {
     setUploading(true);
     try {
       const user = auth.currentUser;
+      const newLocalPhotos = formData.photos.filter(p => !p.startsWith('http'));
+      const existingRemotePhotos = formData.photos.filter(p => p.startsWith('http'));
 
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.data();
-      const nomComplet = userData?.nom ?? user.displayName ?? 'Utilisateur';
-      const initiales = nomComplet
-        .split(' ')
-        .filter((w: string) => w.length > 0)
-        .map((w: string) => w[0].toUpperCase())
-        .join('')
-        .slice(0, 2) || 'U';
+      if (isEditMode && editingItemId) {
+        // Upload new local images only
+        let updatedImages = existingRemotePhotos;
+        if (newLocalPhotos.length > 0) {
+          const newUrls = await uploadItemImages(newLocalPhotos, editingItemId);
+          updatedImages = [...existingRemotePhotos, ...newUrls];
+        }
+        await updateItem(editingItemId, {
+          titre: formData.titre,
+          description: formData.description,
+          categorie: formData.categorie as unknown as Categorie,
+          prixParJour: parseFloat(formData.prixParJour),
+          ville: formData.ville,
+          periodeMin: parseInt(formData.periodeMin, 10) || 1,
+          ...(updatedImages.length > 0 ? { images: updatedImages } : {}),
+        });
+        setUploading(false);
+        loadedItemIdRef.current = null;
+        Alert.alert('Succès', 'Votre annonce a été modifiée !', [
+          { text: 'OK', onPress: goBack },
+        ]);
+      } else {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.data();
+        const nomComplet = fullName({ prenom: userData?.prenom, nom: userData?.nom });
+        const initiales = getInitials({ prenom: userData?.prenom, nom: userData?.nom });
 
-      const itemId = await createItem({
-        titre: formData.titre,
-        description: formData.description,
-        categorie: formData.categorie as unknown as Categorie,
-        prixParJour: parseFloat(formData.prixParJour),
-        ville: formData.ville,
-        photoUrl: '',
-        ownerId: user.uid,
-        proprietaireId: user.uid,
-        proprietaire: { nom: nomComplet, initiales },
-        actif: true,
-        datePublication: new Date(),
-      });
+        const itemId = await createItem({
+          titre: formData.titre,
+          description: formData.description,
+          categorie: formData.categorie as unknown as Categorie,
+          prixParJour: parseFloat(formData.prixParJour),
+          ville: formData.ville,
+          photoUrl: '',
+          ownerId: user.uid,
+          proprietaireId: user.uid,
+          proprietaire: { nom: nomComplet, initiales },
+          actif: true,
+          datePublication: new Date(),
+          periodeMin: parseInt(formData.periodeMin, 10) || 1,
+        });
 
-      if (formData.photos.length > 0) {
-        const downloadURLs = await uploadItemImages(formData.photos, itemId);
-        await updateItem(itemId, { images: downloadURLs });
+        if (formData.photos.length > 0) {
+          const downloadURLs = await uploadItemImages(formData.photos, itemId);
+          await updateItem(itemId, { images: downloadURLs });
+        }
+
+        setUploading(false);
+        Alert.alert('Succès', 'Votre objet a été publié !', [
+          { text: 'OK', onPress: goBack },
+        ]);
       }
-
-      setUploading(false);
-      Alert.alert('Succès', 'Votre objet a été publié !', [
-        { text: 'OK', onPress: goBack },
-      ]);
     } catch {
       setUploading(false);
       Alert.alert('Erreur', 'Une erreur est survenue. Réessayez.');
     }
+  }
+
+  // ── Delete ──
+
+  function handleDelete() {
+    if (!editingItemId) return;
+    Alert.alert(
+      'Supprimer l\'annonce',
+      'Cette action est irréversible. Voulez-vous vraiment supprimer cette annonce ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            setUploading(true);
+            try {
+              await softDeleteItem(editingItemId);
+              setUploading(false);
+              loadedItemIdRef.current = null;
+              Alert.alert('Annonce supprimée', 'Votre annonce a été supprimée.', [
+                { text: 'OK', onPress: goBack },
+              ]);
+            } catch {
+              setUploading(false);
+              Alert.alert('Erreur', "Impossible de supprimer l'annonce.");
+            }
+          },
+        },
+      ],
+    );
   }
 
   // ── Step 1 ──
@@ -249,14 +362,12 @@ export default function AddItemScreen() {
   function renderStep1() {
     return (
       <View style={styles.stepContent}>
-        {/* Zone upload */}
         <TouchableOpacity style={styles.uploadZone} onPress={pickImage} activeOpacity={0.8}>
           <Ionicons name="camera" size={40} color={Colors.textTertiary} />
           <Text style={styles.uploadTitle}>Ajouter des photos</Text>
           <Text style={styles.uploadSub}>Maximum 5 photos</Text>
         </TouchableOpacity>
 
-        {/* Miniatures */}
         {formData.photos.length > 0 && (
           <ScrollView
             horizontal
@@ -279,7 +390,6 @@ export default function AddItemScreen() {
           </ScrollView>
         )}
 
-        {/* Titre */}
         <View style={styles.fieldGroup}>
           <View style={styles.labelRow}>
             <Text style={styles.label}>Titre de l'annonce *</Text>
@@ -295,7 +405,6 @@ export default function AddItemScreen() {
           />
         </View>
 
-        {/* Description */}
         <View style={styles.fieldGroup}>
           <View style={styles.labelRow}>
             <Text style={styles.label}>Description *</Text>
@@ -320,7 +429,6 @@ export default function AddItemScreen() {
   function renderStep2() {
     return (
       <View style={styles.stepContent}>
-        {/* Catégorie */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Catégorie *</Text>
           <View style={styles.categoryGrid}>
@@ -357,7 +465,6 @@ export default function AddItemScreen() {
           </View>
         </View>
 
-        {/* Prix */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Prix par jour *</Text>
           <View style={styles.inputRow}>
@@ -375,7 +482,6 @@ export default function AddItemScreen() {
           </View>
         </View>
 
-        {/* Ville */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Ville *</Text>
           <View style={styles.inputRow}>
@@ -386,8 +492,25 @@ export default function AddItemScreen() {
               placeholderTextColor={Colors.textTertiary}
               value={formData.ville}
               onChangeText={t => setFormData(prev => ({ ...prev, ville: t }))}
+              returnKeyType="next"
+            />
+          </View>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>Période minimum *</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="time-outline" size={20} color={Colors.textTertiary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.inputRowText}
+              placeholder="1"
+              placeholderTextColor={Colors.textTertiary}
+              value={formData.periodeMin}
+              onChangeText={t => setFormData(prev => ({ ...prev, periodeMin: t.replace(/[^0-9]/g, '') || '1' }))}
+              keyboardType="numeric"
               returnKeyType="done"
             />
+            <Text style={styles.inputSuffix}>jours min.</Text>
           </View>
         </View>
       </View>
@@ -402,7 +525,6 @@ export default function AddItemScreen() {
 
     return (
       <View style={styles.stepContent}>
-        {/* Photo de couverture */}
         {firstPhoto ? (
           <Image source={{ uri: firstPhoto }} style={styles.recapPhoto} resizeMode="cover" />
         ) : (
@@ -412,7 +534,6 @@ export default function AddItemScreen() {
           </View>
         )}
 
-        {/* Card récap */}
         <View style={styles.recapCard}>
           <View style={styles.recapRow}>
             <Ionicons name="pricetag-outline" size={18} color={Colors.primary} />
@@ -441,22 +562,40 @@ export default function AddItemScreen() {
           </View>
         </View>
 
-        {/* Message info */}
-        <View style={styles.infoBox}>
-          <Ionicons name="information-circle" size={20} color={Colors.info} />
-          <Text style={styles.infoText}>
-            Votre annonce sera visible après vérification
-          </Text>
-        </View>
+        {isEditMode && (
+          <TouchableOpacity
+            style={[styles.btnDelete, uploading && { opacity: 0.5 }]}
+            onPress={handleDelete}
+            activeOpacity={0.85}
+            disabled={uploading}
+          >
+            <Ionicons name="trash-outline" size={18} color={Colors.error} />
+            <Text style={styles.btnDeleteText}>Supprimer l'annonce</Text>
+          </TouchableOpacity>
+        )}
+
+        {!isEditMode && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={Colors.info} />
+            <Text style={styles.infoText}>Votre annonce sera visible après vérification</Text>
+          </View>
+        )}
       </View>
     );
   }
 
   // ── Render ──
 
+  if (loadingItem) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -465,26 +604,22 @@ export default function AddItemScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Publier un objet</Text>
+        <Text style={styles.headerTitle}>
+          {isEditMode ? "Modifier l'annonce" : 'Publier un objet'}
+        </Text>
         <StepIndicator current={currentStep} />
       </View>
 
-      {/* Content with slide animation */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={insets.top + 60}
       >
         <View style={[styles.flex, { overflow: 'hidden' }]}>
-          <Animated.View
-            style={[styles.flex, { transform: [{ translateX: slideAnim }] }]}
-          >
+          <Animated.View style={[styles.flex, { transform: [{ translateX: slideAnim }] }]}>
             <ScrollView
               style={styles.flex}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: insets.bottom + 24 },
-              ]}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 }]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
@@ -494,51 +629,47 @@ export default function AddItemScreen() {
             </ScrollView>
           </Animated.View>
         </View>
-
-        {/* Bottom buttons */}
-        <View
-          style={[
-            styles.bottomBar,
-            { paddingBottom: Math.max(insets.bottom, 12) + 12 },
-          ]}
-        >
-          {currentStep === 3 ? (
-            <TouchableOpacity
-              style={[styles.btnPublish, uploading && { opacity: 0.7 }]}
-              onPress={publish}
-              activeOpacity={0.88}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={Colors.textInverse} />
-              ) : (
-                <Text style={styles.btnPrimaryText}>Publier l'annonce</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.btnRow}>
-              {currentStep > 1 && (
-                <TouchableOpacity
-                  style={styles.btnOutline}
-                  onPress={() => goToStep(currentStep - 1)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.btnOutlineText}>← Retour</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.btnPrimary, currentStep === 1 && styles.btnPrimaryFull]}
-                onPress={() => {
-                  if (validateStep(currentStep)) goToStep(currentStep + 1);
-                }}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.btnPrimaryText}>Suivant →</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
       </KeyboardAvoidingView>
+
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
+        {currentStep === 3 ? (
+          <TouchableOpacity
+            style={[styles.btnPublish, uploading && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            activeOpacity={0.88}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator color={Colors.textInverse} />
+            ) : (
+              <Text style={styles.btnPrimaryText}>
+                {isEditMode ? 'Enregistrer les modifications' : "Publier l'annonce"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.btnRow}>
+            {currentStep > 1 && (
+              <TouchableOpacity
+                style={styles.btnOutline}
+                onPress={() => goToStep(currentStep - 1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnOutlineText}>← Retour</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.btnPrimary, currentStep === 1 && styles.btnPrimaryFull]}
+              onPress={() => {
+                if (validateStep(currentStep)) goToStep(currentStep + 1);
+              }}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.btnPrimaryText}>Suivant →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -826,9 +957,28 @@ const styles = StyleSheet.create({
     color: Colors.info,
     lineHeight: 20,
   },
+  btnDelete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: Layout.buttonHeight.md,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+  },
+  btnDeleteText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.md,
+    color: Colors.error,
+  },
 
   // ── Bottom bar ──
   bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingTop: Spacing.md,
     paddingHorizontal: Layout.screenPadding,
     backgroundColor: Colors.surface,
