@@ -697,7 +697,7 @@ export const sendMessage = async (
 
     await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageData);
     await updateDoc(doc(db, 'conversations', conversationId), {
-      lastMessage: imageUrl ? '📷 Photo' : trimmed,
+      lastMessage: imageUrl ? '__IMAGE__' : trimmed,
       lastMessageAt: serverTimestamp(),
     });
   } catch (error) {
@@ -719,4 +719,95 @@ export const uploadChatImage = async (
   const storageRef = ref(storage, `conversations/${conversationId}/${Date.now()}.jpg`);
   await uploadBytes(storageRef, blob);
   return await getDownloadURL(storageRef);
+};
+
+// ─── ConversationWithUser ─────────────────────────────────────
+
+export interface ConversationWithUser {
+  id: string;
+  participants: string[];
+  itemId: string;
+  itemTitre: string;
+  lastMessage: string;
+  lastMessageAt: Date;
+  otherUserId: string;
+  otherUser: User | null;
+}
+
+/**
+ * Récupère toutes les conversations de l'utilisateur, hydratées avec le profil de l'autre participant.
+ */
+export const getUserConversations = async (uid: string): Promise<ConversationWithUser[]> => {
+  if (!uid) return [];
+  try {
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', uid),
+    );
+    const snap = await getDocs(q);
+
+    const conversations = await Promise.all(
+      snap.docs.map(async (d) => {
+        const data = d.data();
+        const otherUserId = ((data.participants ?? []) as string[]).find(p => p !== uid) ?? '';
+        const otherUser = otherUserId ? await getUserById(otherUserId) : null;
+        return {
+          id: d.id,
+          participants: data.participants ?? [],
+          itemId: data.itemId ?? '',
+          itemTitre: data.itemTitre ?? '',
+          lastMessage: data.lastMessage ?? '',
+          lastMessageAt: data.lastMessageAt instanceof Timestamp
+            ? data.lastMessageAt.toDate()
+            : new Date(0),
+          otherUserId,
+          otherUser,
+        } as ConversationWithUser;
+      }),
+    );
+
+    return conversations.sort(
+      (a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime(),
+    );
+  } catch (error) {
+    console.error('Erreur getUserConversations:', error);
+    return [];
+  }
+};
+
+// ─── UserBadges ───────────────────────────────────────────────
+
+export interface UserBadges {
+  pendingRequestsCount: number;
+  unreadMessagesCount: number;
+}
+
+/**
+ * Compteurs pour les badges UI.
+ * pendingRequestsCount : demandes PENDING reçues (dual-query ownerId + proprietaireId)
+ * unreadMessagesCount  : 0 pour l'instant (système de lecture non implémenté)
+ */
+export const getUserBadges = async (uid: string): Promise<UserBadges> => {
+  if (!uid) return { pendingRequestsCount: 0, unreadMessagesCount: 0 };
+  try {
+    const [s1, s2] = await Promise.all([
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('proprietaireId', '==', uid),
+        where('statut', '==', StatutDemande.PENDING),
+      )),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('ownerId', '==', uid),
+        where('statut', '==', StatutDemande.PENDING),
+      )),
+    ]);
+    const ids = new Set<string>();
+    s1.docs.forEach(d => ids.add(d.id));
+    s2.docs.forEach(d => ids.add(d.id));
+    return { pendingRequestsCount: ids.size, unreadMessagesCount: 0 };
+  } catch (error) {
+    console.error('Erreur getUserBadges:', error);
+    return { pendingRequestsCount: 0, unreadMessagesCount: 0 };
+  }
 };

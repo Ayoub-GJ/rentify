@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import SmartImage from '../../components/SmartImage';
 import { logout } from '../../services/authService';
@@ -122,6 +122,7 @@ function InfoRow({
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const navigation = useNavigation();
 
   const [profile, setProfile] = useState<User | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -381,6 +382,13 @@ export default function ProfileScreen() {
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>Activité</Text>
           <View style={styles.menuCard}>
+            <ActionRow
+              icon="chatbubble-outline"
+              label="Messages"
+              onPress={() =>
+                (navigation as any).getParent()?.navigate('Home', { screen: 'Messages' })
+              }
+            />
             <ActionRow
               icon="heart-outline"
               label="Favoris"

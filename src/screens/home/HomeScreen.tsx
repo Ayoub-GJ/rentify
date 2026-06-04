@@ -15,7 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
-import { getAllItems, getItemsByCategory } from '../../services/firestoreService';
+import { getAllItems, getItemsByCategory, getUserBadges, UserBadges } from '../../services/firestoreService';
+import { auth } from '../../config/firebase.config';
 import { Item } from '../../types';
 import { MockItem } from '../../data/mockItems';
 import {
@@ -111,6 +112,7 @@ export default function HomeScreen() {
   const [activeCategory, setActiveCategory] = useState<string>('tout');
   const [items, setItems] = useState<Item[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [badges, setBadges] = useState<UserBadges>({ pendingRequestsCount: 0, unreadMessagesCount: 0 });
 
   const firebaseUser = getCurrentUser();
   const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'toi';
@@ -126,6 +128,8 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadItems();
+      const uid = auth.currentUser?.uid;
+      if (uid) getUserBadges(uid).then(setBadges);
     }, [loadItems])
   );
 
@@ -157,9 +161,32 @@ export default function HomeScreen() {
             <Text style={styles.locationText}>Agadir, Maroc</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.bellButton} activeOpacity={0.8}>
-          <Ionicons name="notifications-outline" size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.bellButton}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Messages')}
+          >
+            <Ionicons name="chatbubble-outline" size={22} color={Colors.textPrimary} />
+            {badges.unreadMessagesCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {badges.unreadMessagesCount > 9 ? '9+' : badges.unreadMessagesCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bellButton} activeOpacity={0.8}>
+            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+            {badges.pendingRequestsCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {badges.pendingRequestsCount > 9 ? '9+' : badges.pendingRequestsCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Barre de recherche ── */}
@@ -295,6 +322,10 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     color: Colors.textSecondary,
   },
+  headerActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
   bellButton: {
     width: 44,
     height: 44,
@@ -303,6 +334,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.sm,
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: Colors.background,
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontFamily: Typography.fontBodyMedium,
+    lineHeight: 14,
   },
 
   // ── Recherche ──

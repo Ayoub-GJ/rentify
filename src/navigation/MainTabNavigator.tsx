@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
@@ -11,11 +11,26 @@ import SearchStackNavigator from './SearchStackNavigator';
 import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import { auth } from '../config/firebase.config';
+import { getUserBadges } from '../services/firestoreService';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const fetchBadges = async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      const b = await getUserBadges(uid);
+      setPendingCount(b.pendingRequestsCount);
+    };
+    fetchBadges();
+    const interval = setInterval(fetchBadges, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const tabBarStyle = {
     backgroundColor: Colors.surface,
@@ -49,7 +64,7 @@ export default function MainTabNavigator() {
         component={HomeStackNavigator}
         options={({ route }) => {
           const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Home';
-          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat';
+          const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat' || focusedRoute === 'Messages';
           return {
             tabBarLabel: 'Accueil',
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
@@ -99,6 +114,14 @@ export default function MainTabNavigator() {
             tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
               <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
             ),
+            tabBarBadge: pendingCount > 0 ? (pendingCount > 9 ? '9+' : pendingCount) : undefined,
+            tabBarBadgeStyle: {
+              backgroundColor: Colors.error,
+              color: '#FFF',
+              fontSize: 10,
+              minWidth: 18,
+              height: 18,
+            },
             ...(hideTabBar && { tabBarStyle: { display: 'none' } }),
           };
         }}
