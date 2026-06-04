@@ -18,6 +18,15 @@ import { db, storage } from '../config/firebase.config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User, Message } from '../types';
 
+// ─── UserStats ────────────────────────────────────────────────
+export interface UserStats {
+  itemsCount: number;
+  rentalsCount: number;
+  earningsTotal: number;
+  averageRating: number;
+  reviewsCount: number;
+}
+
 // ─── RentalData ───────────────────────────────────────────────
 // Format étendu stocké dans Firestore (champs dénormalisés)
 export interface RentalData {
@@ -303,15 +312,21 @@ export const getItemsByCategory = async (categorie: string | Categorie): Promise
 
 /**
  * Récupérer les objets d'un propriétaire
+ * Dual-query : couvre les anciens docs (ownerId) et les nouveaux (proprietaireId)
  */
 export const getItemsByOwner = async (ownerId: string): Promise<Item[]> => {
+  if (!ownerId) return [];
   try {
-    const q = query(
-      collection(db, 'items'),
-      where('ownerId', '==', ownerId)
+    const [s1, s2] = await Promise.all([
+      getDocs(query(collection(db, 'items'), where('proprietaireId', '==', ownerId))),
+      getDocs(query(collection(db, 'items'), where('ownerId', '==', ownerId))),
+    ]);
+    const map = new Map<string, Item>();
+    s1.docs.forEach(d => map.set(d.id, mapDocToItem(d)));
+    s2.docs.forEach(d => { if (!map.has(d.id)) map.set(d.id, mapDocToItem(d)); });
+    return Array.from(map.values()).sort(
+      (a, b) => b.datePublication.getTime() - a.datePublication.getTime(),
     );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(mapDocToItem);
   } catch (error) {
     console.error('Erreur getItemsByOwner:', error);
     return [];
@@ -384,14 +399,21 @@ export const getRentalsByLocataire = async (uid: string): Promise<RentalData[]> 
 
 /**
  * Récupérer les locations où l'utilisateur est propriétaire
+ * Dual-query : couvre rentals stockés avec ownerId (legacy) ou proprietaireId
  */
 export const getRentalsByProprietaire = async (uid: string): Promise<RentalData[]> => {
+  if (!uid) return [];
   try {
-    const q = query(collection(db, 'rentals'), where('proprietaireId', '==', uid));
-    const snapshot = await getDocs(q);
-    const rentals = snapshot.docs.map(mapRentalDoc);
-    rentals.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
-    return rentals;
+    const [s1, s2] = await Promise.all([
+      getDocs(query(collection(db, 'rentals'), where('proprietaireId', '==', uid))),
+      getDocs(query(collection(db, 'rentals'), where('ownerId', '==', uid))),
+    ]);
+    const map = new Map<string, RentalData>();
+    s1.docs.forEach(d => map.set(d.id, mapRentalDoc(d)));
+    s2.docs.forEach(d => { if (!map.has(d.id)) map.set(d.id, mapRentalDoc(d)); });
+    return Array.from(map.values()).sort(
+      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+    );
   } catch (error) {
     console.error('Erreur getRentalsByProprietaire:', error);
     return [];
@@ -578,6 +600,77 @@ export const subscribeToMessages = (
     });
     callback(messages);
   });
+};
+
+/**
+ * Mettre à jour le profil d'un utilisateur
+ */
+export const updateUserProfile = async (uid: string, updates: Partial<User>): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'users', uid), updates as Record<string, unknown>);
+  } catch (error) {
+    console.error('Erreur updateUserProfile:', error);
+    throw new Error('Impossible de mettre à jour le profil');
+  }
+};
+
+/**
+ * Uploader un avatar utilisateur (écrase avatars/{uid}.jpg)
+ */
+export const uploadUserAvatar = async (localUri: string, uid: string): Promise<string> => {
+  try {
+    const blob = await fetch(localUri).then(r => r.blob());
+    const storageRef = ref(storage, `avatars/${uid}.jpg`);
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  } catch (error) {
+    console.error('Erreur uploadUserAvatar:', error);
+    throw new Error("Impossible d'uploader l'avatar");
+  }
+};
+
+/**
+ * Statistiques d'un utilisateur (annonces, locations, gains, note)
+ * itemsCount : dual-query via getItemsByOwner (couvre ownerId + proprietaireId)
+ * earningsTotal : dual-query sur rentals COMPLETED (idem)
+ */
+export const getUserStats = async (uid: string): Promise<UserStats> => {
+  try {
+    const [items, rentalsLocSnap, earningsS1, earningsS2] = await Promise.all([
+      getItemsByOwner(uid),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('locataireId', '==', uid),
+        where('statut', '==', StatutDemande.COMPLETED),
+      )),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('proprietaireId', '==', uid),
+        where('statut', '==', StatutDemande.COMPLETED),
+      )),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('ownerId', '==', uid),
+        where('statut', '==', StatutDemande.COMPLETED),
+      )),
+    ]);
+
+    const earningsMap = new Map<string, number>();
+    earningsS1.docs.forEach(d => earningsMap.set(d.id, d.data().prixTotal ?? 0));
+    earningsS2.docs.forEach(d => { if (!earningsMap.has(d.id)) earningsMap.set(d.id, d.data().prixTotal ?? 0); });
+    const earningsTotal = Array.from(earningsMap.values()).reduce((sum, v) => sum + v, 0);
+
+    return {
+      itemsCount: items.length,
+      rentalsCount: rentalsLocSnap.size,
+      earningsTotal,
+      averageRating: 0,
+      reviewsCount: 0,
+    };
+  } catch (error) {
+    console.error('Erreur getUserStats:', error);
+    return { itemsCount: 0, rentalsCount: 0, earningsTotal: 0, averageRating: 0, reviewsCount: 0 };
+  }
 };
 
 /**

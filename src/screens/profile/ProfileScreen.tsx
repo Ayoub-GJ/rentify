@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,101 +6,71 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrentUserProfile, logout } from '../../services/authService';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import SmartImage from '../../components/SmartImage';
+import { logout } from '../../services/authService';
+import {
+  getUserById,
+  updateUserProfile,
+  uploadUserAvatar,
+  getUserStats,
+  UserStats,
+} from '../../services/firestoreService';
+import { auth } from '../../config/firebase.config';
 import { User } from '../../types';
-import { fullName, getInitials } from '../../utils/formatters';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
+import { fullName, getInitials, avatarColorFromUid } from '../../utils/formatters';
+import { Colors, Typography, Spacing, Radius, Shadows, Layout } from '../../theme/theme';
 
 // ─── Types ────────────────────────────────────────────────────
 
-type BadgeType = 'validated' | 'count' | 'new';
+type EditableField = 'prenom' | 'nom' | 'telephone' | 'ville';
 
-interface MenuItem {
+const FIELD_LABELS: Record<EditableField, string> = {
+  prenom: 'Prénom',
+  nom: 'Nom',
+  telephone: 'Téléphone',
+  ville: 'Ville',
+};
+
+// ─── Sub-components ───────────────────────────────────────────
+
+function ActionRow({
+  icon,
+  label,
+  onPress,
+  badge,
+  dimmed,
+  isLast,
+}: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  badgeText?: string;
-  badgeType?: BadgeType;
-}
-
-interface MenuSection {
-  title: string;
-  items: MenuItem[];
-}
-
-// ─── Data ─────────────────────────────────────────────────────
-
-const MENU_SECTIONS: MenuSection[] = [
-  {
-    title: 'Compte',
-    items: [
-      { icon: 'person-outline', label: 'Informations personnelles' },
-      { icon: 'shield-outline', label: "Vérification d'identité", badgeText: 'Validée', badgeType: 'validated' },
-      { icon: 'card-outline', label: 'Paiements & virements' },
-    ],
-  },
-  {
-    title: 'Activité',
-    items: [
-      { icon: 'heart-outline', label: 'Favoris', badgeText: '12', badgeType: 'count' },
-      { icon: 'star-outline', label: 'Mes avis' },
-      { icon: 'chatbubble-outline', label: 'Messages', badgeText: '3 nouveaux', badgeType: 'new' },
-    ],
-  },
-  {
-    title: 'Aide',
-    items: [
-      { icon: 'help-circle-outline', label: "Centre d'aide" },
-      { icon: 'shield-checkmark-outline', label: 'Assurance & litiges' },
-      { icon: 'settings-outline', label: 'Paramètres' },
-    ],
-  },
-];
-
-// ─── Badge ────────────────────────────────────────────────────
-
-function Badge({ text, type }: { text: string; type: BadgeType }) {
-  if (type === 'count') {
-    return <Text style={styles.badgeCount}>{text}</Text>;
-  }
-  if (type === 'validated') {
-    return (
-      <View style={styles.badgeValidated}>
-        <Text style={styles.badgeValidatedText}>{text}</Text>
-      </View>
-    );
-  }
-  return (
-    <View style={styles.badgeNew}>
-      <Text style={styles.badgeNewText}>{text}</Text>
-    </View>
-  );
-}
-
-// ─── MenuRow ──────────────────────────────────────────────────
-
-function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
+  onPress: () => void;
+  badge?: string;
+  dimmed?: boolean;
+  isLast?: boolean;
+}) {
   return (
     <>
       <TouchableOpacity
-        style={styles.menuRow}
+        style={[styles.menuRow, dimmed && styles.menuRowDimmed]}
         activeOpacity={0.7}
-        onPress={() =>
-          Alert.alert(
-            'Bientôt disponible',
-            'Cette fonctionnalité sera disponible prochainement.',
-            [{ text: 'OK' }],
-          )
-        }
+        onPress={onPress}
       >
         <View style={styles.menuIconWrap}>
-          <Ionicons name={item.icon} size={20} color={Colors.primary} />
+          <Ionicons name={icon} size={20} color={dimmed ? Colors.textTertiary : Colors.primary} />
         </View>
-        <Text style={styles.menuLabel}>{item.label}</Text>
-        {item.badgeText && item.badgeType && (
-          <Badge text={item.badgeText} type={item.badgeType} />
+        <Text style={[styles.menuLabel, dimmed && styles.menuLabelDimmed]}>{label}</Text>
+        {badge !== undefined && (
+          <Text style={styles.badgeCount}>{badge}</Text>
         )}
         <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
       </TouchableOpacity>
@@ -109,18 +79,122 @@ function MenuRow({ item, isLast }: { item: MenuItem; isLast: boolean }) {
   );
 }
 
+function InfoRow({
+  icon,
+  label,
+  value,
+  hasValue,
+  onPress,
+  readonly,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  hasValue: boolean;
+  onPress?: () => void;
+  readonly?: boolean;
+}) {
+  const inner = (
+    <>
+      <View style={styles.menuIconWrap}>
+        <Ionicons name={icon} size={20} color={Colors.primary} />
+      </View>
+      <View style={styles.infoRowContent}>
+        <Text style={styles.infoRowLabel}>{label}</Text>
+        <Text style={[styles.infoRowValue, !hasValue && styles.infoRowValueEmpty]}>
+          {value}
+        </Text>
+      </View>
+      {!readonly && <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />}
+    </>
+  );
+
+  if (readonly) return <View style={styles.menuRow}>{inner}</View>;
+  return (
+    <TouchableOpacity style={styles.menuRow} activeOpacity={0.7} onPress={onPress}>
+      {inner}
+    </TouchableOpacity>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const [user, setUser] = useState<User | null>(null);
+  const tabBarHeight = useBottomTabBarHeight();
 
-  useEffect(() => {
-    getCurrentUserProfile().then(setUser).catch(() => {});
-  }, []);
+  const [profile, setProfile] = useState<User | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  const displayName = user ? fullName(user) : '—';
-  const initials = getInitials(user);
+  // Edit field modal
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+  const [editModalValue, setEditModalValue] = useState('');
+
+  // Settings modal
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) { setLoading(false); return; }
+
+      setLoading(true);
+      Promise.all([getUserById(uid), getUserStats(uid)]).then(([p, s]) => {
+        setProfile(p);
+        setStats(s);
+        setLoading(false);
+      });
+    }, []),
+  );
+
+  const uid = auth.currentUser?.uid ?? '';
+
+  // ── Avatar ──
+
+  const handlePickAvatar = async () => {
+    if (!uid) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'] as any,
+      quality: 0.6,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (!result.canceled && result.assets[0]) {
+      setUploadingAvatar(true);
+      try {
+        const url = await uploadUserAvatar(result.assets[0].uri, uid);
+        await updateUserProfile(uid, { photoURL: url });
+        setProfile(prev => prev ? { ...prev, photoURL: url } : prev);
+      } catch {
+        Alert.alert('Erreur', "Impossible de mettre à jour l'avatar.");
+      } finally {
+        setUploadingAvatar(false);
+      }
+    }
+  };
+
+  // ── Edit field ──
+
+  function openEdit(field: EditableField, currentValue: string) {
+    setEditModalValue(currentValue);
+    setEditingField(field);
+  }
+
+  async function handleSaveField() {
+    if (!editingField || !uid) return;
+    try {
+      await updateUserProfile(uid, { [editingField]: editModalValue });
+      setProfile(prev => prev ? { ...prev, [editingField]: editModalValue } : prev);
+      setEditingField(null);
+    } catch {
+      Alert.alert('Erreur', 'Impossible de mettre à jour le profil.');
+    }
+  }
+
+  // ── Logout ──
 
   async function handleLogout() {
     Alert.alert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [
@@ -139,88 +213,362 @@ export default function ProfileScreen() {
     ]);
   }
 
+  // ── Loading / error ──
+
+  if (loading) {
+    return (
+      <View style={styles.loadingRoot}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <View style={styles.loadingRoot}>
+        <Ionicons name="person-circle-outline" size={48} color={Colors.textTertiary} />
+        <Text style={styles.errorText}>Profil introuvable</Text>
+      </View>
+    );
+  }
+
+  // ── Dérivés ──
+
+  const memberYear = profile.createdAt instanceof Date && !isNaN(profile.createdAt.getTime())
+    ? profile.createdAt.getFullYear()
+    : 2026;
+  const locationLine = profile.ville
+    ? `${profile.ville} · Membre depuis ${memberYear}`
+    : `Membre depuis ${memberYear}`;
+
+  const avatarBgColor = avatarColorFromUid(uid);
+  const initials = getInitials(profile);
+  const displayName = fullName(profile);
+
+  // ── Render ──
+
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
-      <View style={[styles.headerBg, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
+    <>
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: tabBarHeight + Spacing.xl }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Header ── */}
+        <View style={[styles.headerBg, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.avatarWrap}>
+            <View style={[styles.avatarCircle, { backgroundColor: avatarBgColor }]}>
+              {profile.photoURL ? (
+                <SmartImage uri={profile.photoURL} style={styles.avatarImage} resizeMode="cover" />
+              ) : (
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              )}
+            </View>
+            {uploadingAvatar && (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator color="white" />
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.cameraBtn}
+              onPress={handlePickAvatar}
+              activeOpacity={0.8}
+              disabled={uploadingAvatar}
+            >
+              <Ionicons name="camera-outline" size={16} color={Colors.textPrimary} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.cameraBtn} activeOpacity={0.8}>
-            <Ionicons name="camera-outline" size={16} color={Colors.textPrimary} />
-          </TouchableOpacity>
+
+          <Text style={styles.userName}>{displayName}</Text>
+
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
+            <Text style={styles.locationText}>{locationLine}</Text>
+          </View>
         </View>
 
-        <Text style={styles.userName}>{displayName}</Text>
-
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
-          <Text style={styles.locationText}>Agadir, Maroc · Membre depuis 2024</Text>
+        {/* ── Stats card ── */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats?.itemsCount ?? 0}</Text>
+            <Text style={styles.statLabel}>Annonces</Text>
+          </View>
+          <View style={styles.statSep} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats?.rentalsCount ?? 0}</Text>
+            <Text style={styles.statLabel}>Locations</Text>
+          </View>
+          <View style={styles.statSep} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats?.earningsTotal ?? 0}</Text>
+            <Text style={styles.statLabel}>MAD gagnés</Text>
+          </View>
+          <View style={styles.statSep} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>
+              {(stats?.reviewsCount ?? 0) > 0 ? `★ ${stats!.averageRating.toFixed(1)}` : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Note</Text>
+          </View>
         </View>
 
-        <View style={styles.verifiedBadge}>
-          <Ionicons name="star" size={13} color={Colors.secondary} />
-          <Text style={styles.verifiedBadgeText}>Profil vérifié</Text>
-        </View>
-      </View>
-
-      {/* Stats — card unifiée avec séparateurs */}
-      <View style={styles.statsCard}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>24</Text>
-          <Text style={styles.statLabel}>Locations</Text>
-        </View>
-        <View style={styles.statSep} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>4.9</Text>
-          <Text style={styles.statLabel}>Note moyenne</Text>
-        </View>
-        <View style={styles.statSep} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>1 420</Text>
-          <Text style={styles.statLabel}>MAD gagnés</Text>
-        </View>
-      </View>
-
-      {/* Menu sections */}
-      {MENU_SECTIONS.map((section) => (
-        <View key={section.title} style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>{section.title}</Text>
+        {/* ── Mes informations ── */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Mes informations</Text>
           <View style={styles.menuCard}>
-            {section.items.map((item, idx) => (
-              <MenuRow
-                key={item.label}
-                item={item}
-                isLast={idx === section.items.length - 1}
-              />
-            ))}
+            <InfoRow
+              icon="person-outline"
+              label="Prénom"
+              value={profile.prenom || 'Non renseigné'}
+              hasValue={!!profile.prenom}
+              onPress={() => openEdit('prenom', profile.prenom ?? '')}
+            />
+            <View style={styles.menuSep} />
+            <InfoRow
+              icon="people-outline"
+              label="Nom"
+              value={profile.nom || 'Non renseigné'}
+              hasValue={!!profile.nom}
+              onPress={() => openEdit('nom', profile.nom ?? '')}
+            />
+            <View style={styles.menuSep} />
+            <InfoRow
+              icon="call-outline"
+              label="Téléphone"
+              value={profile.telephone || 'Non renseigné'}
+              hasValue={!!profile.telephone}
+              onPress={() => openEdit('telephone', profile.telephone ?? '')}
+            />
+            <View style={styles.menuSep} />
+            <InfoRow
+              icon="location-outline"
+              label="Ville"
+              value={profile.ville || 'Non renseignée'}
+              hasValue={!!profile.ville}
+              onPress={() => openEdit('ville', profile.ville ?? '')}
+            />
+            <View style={styles.menuSep} />
+            <InfoRow
+              icon="mail-outline"
+              label="Email"
+              value={profile.email}
+              hasValue={true}
+              readonly
+            />
           </View>
         </View>
-      ))}
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-        <Text style={styles.logoutText}>Se déconnecter</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* ── Section COMPTE ── */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Compte</Text>
+          <View style={styles.menuCard}>
+            <ActionRow
+              icon="card-outline"
+              label="Paiements & virements"
+              dimmed
+              isLast
+              onPress={() =>
+                Alert.alert(
+                  'Bientôt disponible',
+                  'Les paiements en ligne seront disponibles dans une prochaine version.',
+                )
+              }
+            />
+          </View>
+        </View>
+
+        {/* ── Section ACTIVITÉ ── */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Activité</Text>
+          <View style={styles.menuCard}>
+            <ActionRow
+              icon="heart-outline"
+              label="Favoris"
+              badge="0"
+              onPress={() =>
+                Alert.alert('Bientôt disponible', 'La liste des favoris arrive dans une prochaine version.')
+              }
+            />
+            <ActionRow
+              icon="star-outline"
+              label="Mes avis"
+              isLast
+              onPress={() =>
+                Alert.alert('Bientôt disponible', 'Le système d\'avis sera disponible après le MVP.')
+              }
+            />
+          </View>
+        </View>
+
+        {/* ── Section AIDE ── */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Aide</Text>
+          <View style={styles.menuCard}>
+            <ActionRow
+              icon="help-circle-outline"
+              label="Centre d'aide"
+              onPress={() =>
+                Alert.alert(
+                  "Centre d'aide",
+                  'Pour toute question, contactez-nous à support@rentify.app',
+                )
+              }
+            />
+            <ActionRow
+              icon="settings-outline"
+              label="Paramètres"
+              isLast
+              onPress={() => setSettingsVisible(true)}
+            />
+          </View>
+        </View>
+
+        {/* ── Logout ── */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+          <Text style={styles.logoutText}>Se déconnecter</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* ── Edit field modal ── */}
+      <Modal visible={editingField !== null} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setEditingField(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Modifier {editingField ? FIELD_LABELS[editingField].toLowerCase() : ''}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editModalValue}
+              onChangeText={setEditModalValue}
+              autoFocus
+              keyboardType={editingField === 'telephone' ? 'phone-pad' : 'default'}
+              returnKeyType="done"
+              onSubmitEditing={handleSaveField}
+              placeholderTextColor={Colors.textTertiary}
+              placeholder={editingField ? `Entrez votre ${FIELD_LABELS[editingField].toLowerCase()}` : ''}
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalBtnCancel}
+                onPress={() => setEditingField(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalBtnSave}
+                onPress={handleSaveField}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.modalBtnSaveText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Settings modal ── */}
+      <Modal visible={settingsVisible} transparent animationType="slide" statusBarTranslucent>
+        <View style={styles.settingsBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setSettingsVisible(false)} />
+          <View style={styles.settingsSheet}>
+            <View style={styles.settingsHeader}>
+              <Text style={styles.settingsTitle}>Paramètres</Text>
+              <TouchableOpacity onPress={() => setSettingsVisible(false)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.menuCard}>
+              {/* Notifications */}
+              <View style={styles.settingsRow}>
+                <View style={styles.menuIconWrap}>
+                  <Ionicons name="notifications-outline" size={20} color={Colors.primary} />
+                </View>
+                <Text style={styles.menuLabel}>Notifications</Text>
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={setNotificationsEnabled}
+                  trackColor={{ false: Colors.border, true: Colors.primary }}
+                  thumbColor={Colors.surface}
+                />
+              </View>
+              <View style={styles.menuSep} />
+
+              {/* Mode sombre — désactivé */}
+              <View style={[styles.settingsRow, styles.menuRowDimmed]}>
+                <View style={styles.menuIconWrap}>
+                  <Ionicons name="moon-outline" size={20} color={Colors.textTertiary} />
+                </View>
+                <Text style={[styles.menuLabel, styles.menuLabelDimmed]}>Mode sombre</Text>
+                <Switch
+                  value={false}
+                  onValueChange={() =>
+                    Alert.alert('Bientôt disponible', 'Le mode sombre sera disponible dans une prochaine version.')
+                  }
+                  trackColor={{ false: Colors.border, true: Colors.primary }}
+                  thumbColor={Colors.surface}
+                />
+              </View>
+              <View style={styles.menuSep} />
+
+              {/* Version */}
+              <View style={styles.settingsRow}>
+                <View style={styles.menuIconWrap}>
+                  <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
+                </View>
+                <Text style={styles.menuLabel}>Version de l'app</Text>
+                <Text style={styles.settingsRowValue}>1.0.0</Text>
+              </View>
+              <View style={styles.menuSep} />
+
+              {/* Politique */}
+              <TouchableOpacity
+                style={styles.settingsRow}
+                activeOpacity={0.7}
+                onPress={() =>
+                  Alert.alert(
+                    'Politique de confidentialité',
+                    'Vos données sont stockées de façon sécurisée sur Firebase et ne sont jamais partagées avec des tiers.',
+                  )
+                }
+              >
+                <View style={styles.menuIconWrap}>
+                  <Ionicons name="shield-outline" size={20} color={Colors.primary} />
+                </View>
+                <Text style={styles.menuLabel}>Politique de confidentialité</Text>
+                <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────
+
+const AVATAR_SIZE = Layout.avatarSize.xl;
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
   },
-  content: {
-    flexGrow: 1,
+  loadingRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+    gap: Spacing.md,
+  },
+  errorText: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.md,
+    color: Colors.textTertiary,
   },
 
   // ── Header ──
@@ -236,18 +584,33 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: Spacing.md,
   },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: Colors.primary,
+  avatarCircle: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImage: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
   },
   avatarInitials: {
     fontFamily: Typography.fontDisplay,
     fontSize: 36,
     color: Colors.textInverse,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cameraBtn: {
     position: 'absolute',
@@ -271,29 +634,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: Spacing.md,
   },
   locationText: {
     fontFamily: Typography.fontBody,
     fontSize: 13,
     color: Colors.textSecondary,
   },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.secondaryXLight,
-    borderRadius: Radius.full,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  verifiedBadgeText: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 13,
-    color: Colors.secondary,
-  },
 
-  // ── Stats — card unifiée ──
+  // ── Stats card ──
   statsCard: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -315,14 +663,34 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontFamily: Typography.fontDisplay,
-    fontSize: 22,
+    fontSize: 20,
     color: Colors.primary,
   },
   statLabel: {
     fontFamily: Typography.fontBody,
-    fontSize: 11,
+    fontSize: 10,
     color: Colors.textTertiary,
     textAlign: 'center',
+  },
+
+  // ── Info rows ──
+  infoRowContent: {
+    flex: 1,
+    gap: 2,
+  },
+  infoRowLabel: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.xs,
+    color: Colors.textTertiary,
+  },
+  infoRowValue: {
+    fontFamily: Typography.fontSubheading,
+    fontSize: Typography.size.sm,
+    color: Colors.textPrimary,
+  },
+  infoRowValueEmpty: {
+    color: Colors.textTertiary,
+    fontFamily: Typography.fontBody,
   },
 
   // ── Menu ──
@@ -351,6 +719,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
   },
+  menuRowDimmed: {
+    opacity: 0.5,
+  },
   menuIconWrap: {
     width: 40,
     height: 40,
@@ -365,39 +736,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
   },
+  menuLabelDimmed: {
+    color: Colors.textTertiary,
+  },
   menuSep: {
     height: 1,
     backgroundColor: Colors.border,
     marginLeft: 72,
   },
-
-  // ── Badges ──
   badgeCount: {
     fontFamily: Typography.fontBody,
     fontSize: 14,
     color: Colors.textSecondary,
-  },
-  badgeValidated: {
-    backgroundColor: Colors.secondaryXLight,
-    borderRadius: Radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  badgeValidatedText: {
-    fontFamily: Typography.fontBodyMedium,
-    fontSize: 12,
-    color: Colors.secondary,
-  },
-  badgeNew: {
-    backgroundColor: Colors.primaryXLight,
-    borderRadius: Radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  badgeNewText: {
-    fontFamily: Typography.fontHeading,
-    fontSize: 12,
-    color: Colors.primary,
   },
 
   // ── Logout ──
@@ -417,5 +767,109 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontHeading,
     fontSize: 15,
     color: Colors.error,
+  },
+
+  // ── Edit modal ──
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    padding: Spacing['2xl'],
+    gap: Spacing.lg,
+    ...Shadows.lg,
+  },
+  modalTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.lg,
+    color: Colors.textPrimary,
+    textTransform: 'capitalize',
+  },
+  modalInput: {
+    height: Layout.inputHeight,
+    backgroundColor: Colors.background,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.xl,
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.md,
+    color: Colors.textPrimary,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  modalBtnCancel: {
+    flex: 1,
+    height: Layout.buttonHeight.md,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnCancelText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.md,
+    color: Colors.textSecondary,
+  },
+  modalBtnSave: {
+    flex: 1,
+    height: Layout.buttonHeight.md,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.button,
+  },
+  modalBtnSaveText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.md,
+    color: Colors.textInverse,
+  },
+
+  // ── Settings modal ──
+  settingsBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  settingsSheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: Radius['2xl'],
+    borderTopRightRadius: Radius['2xl'],
+    padding: Spacing.xl,
+    paddingBottom: Spacing['4xl'],
+    gap: Spacing.lg,
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  settingsTitle: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: Typography.size.xl,
+    color: Colors.textPrimary,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  settingsRowValue: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.sm,
+    color: Colors.textTertiary,
   },
 });
