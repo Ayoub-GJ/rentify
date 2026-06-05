@@ -268,11 +268,12 @@ export const Categories = [
 
 // ─── STATUTS LOCATION ────────────────────────────────────────
 export const RentalStatusConfig = {
-  PENDING:   { label: 'En attente', color: Colors.pending,   bg: Colors.pendingBg   },
-  ACCEPTED:  { label: 'Acceptée',   color: Colors.accepted,  bg: Colors.acceptedBg  },
-  REJECTED:  { label: 'Refusée',    color: Colors.rejected,  bg: Colors.rejectedBg  },
-  CANCELLED: { label: 'Annulée',    color: Colors.cancelled, bg: Colors.cancelledBg },
-  COMPLETED: { label: 'Terminée',   color: Colors.completed, bg: Colors.completedBg },
+  PENDING:     { label: 'En attente', color: Colors.pending,   bg: Colors.pendingBg   },
+  ACCEPTED:    { label: 'Acceptée',   color: Colors.accepted,  bg: Colors.acceptedBg  },
+  IN_PROGRESS: { label: 'En cours',   color: Colors.info,      bg: Colors.infoLight   },
+  REJECTED:    { label: 'Refusée',    color: Colors.rejected,  bg: Colors.rejectedBg  },
+  CANCELLED:   { label: 'Annulée',    color: Colors.cancelled, bg: Colors.cancelledBg },
+  COMPLETED:   { label: 'Terminée',   color: Colors.completed, bg: Colors.completedBg },
 } as const;
 
 // ─── ANIMATIONS ──────────────────────────────────────────────

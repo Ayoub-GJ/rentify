@@ -1,23 +1,40 @@
 // États possibles d'une demande de location
 export enum StatutDemande {
   PENDING = 'PENDING',           // En attente
-  ACCEPTED = 'ACCEPTED',         // Acceptée
+  ACCEPTED = 'ACCEPTED',         // Acceptée, en attente de remise
+  IN_PROGRESS = 'IN_PROGRESS',   // Remis au locataire, location en cours
   REJECTED = 'REJECTED',         // Refusée
   CANCELLED = 'CANCELLED',       // Annulée
-  COMPLETED = 'COMPLETED',       // Terminée
+  COMPLETED = 'COMPLETED',       // Rendu et confirmé, terminée
 }
 
 // Type pour une demande de location
 export interface Rental {
-  id: string;                    // ID unique de la location
-  itemId: string;                // ID de l'objet loué
-  renterId: string;              // ID du locataire
-  ownerId: string;               // ID du propriétaire
-  dateDebut: Date;               // Date de début
-  dateFin: Date;                 // Date de fin
-  prixTotal: number;             // Prix total calculé
-  statut: StatutDemande;         // État de la demande
-  dateCreation: Date;            // Date de création
+  id: string;
+  itemId: string;
+  itemTitre: string;
+  itemImage: string;
+  locataireId: string;
+  proprietaireId: string;
+  dateDebut: Date;
+  dateFin: Date;
+  jours: number;
+  prixTotal: number;
+  message: string;
+  statut: StatutDemande;
+
+  // Workflow remise
+  remiseProprio?: boolean;
+  remiseLocataire?: boolean;
+  remiseAt?: Date;
+
+  // Workflow retour
+  retourLocataire?: boolean;
+  retourProprio?: boolean;
+  retourAt?: Date;
+
+  createdAt: Date;
+  updatedAt?: Date;
 }
 
 // Type pour créer une demande

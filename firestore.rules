@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ────────────────────────────────────────
+    // Helpers
+    // ────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isItemOwner(itemData) {
+      // Tolérance pour les anciens docs qui ont ownerId au lieu de proprietaireId
+      return isSignedIn() && (
+        request.auth.uid == itemData.proprietaireId ||
+        request.auth.uid == itemData.ownerId
+      );
+    }
+
+    // ────────────────────────────────────────
+    // USERS
+    // ────────────────────────────────────────
+    // Lecture : tout user authentifié peut voir un profil (pour
+    // afficher noms/avatars dans les chats, items, etc.)
+    // Écriture : un user ne peut modifier que SON propre profil.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false; // jamais via le client
+    }
+
+    // ────────────────────────────────────────
+    // ITEMS
+    // ────────────────────────────────────────
+    // Lecture : tout user authentifié (marketplace public).
+    // Création : signé + proprietaireId == uid du créateur.
+    // Modif/Suppression : uniquement par le proprio de l'item.
+    match /items/{itemId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && (
+        request.resource.data.proprietaireId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid
+      );
+
+      allow update: if isItemOwner(resource.data);
+      allow delete: if isItemOwner(resource.data);
+    }
+
+    // ────────────────────────────────────────
+    // RENTALS
+    // ────────────────────────────────────────
+    // Lecture : participants seulement (locataire ou propriétaire).
+    // Création : signé + locataireId == uid (c'est le locataire qui crée).
+    // Mise à jour du statut :
+    //   - Le propriétaire peut PASSER de PENDING → ACCEPTED/REJECTED
+    //   - Le locataire peut annuler (PENDING → CANCELLED)
+    //   - Les deux peuvent marquer COMPLETED
+    match /rentals/{rentalId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.locataireId ||
+        request.auth.uid == resource.data.proprietaireId ||
+        request.auth.uid == resource.data.ownerId // compatibilité legacy
+      );
+
+      allow create: if isSignedIn() &&
+        request.resource.data.locataireId == request.auth.uid;
+
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.locataireId ||
+        request.auth.uid == resource.data.proprietaireId ||
+        request.auth.uid == resource.data.ownerId
+      ) &&
+      // Champs immuables : ne peuvent jamais être modifiés après création
+      request.resource.data.itemId == resource.data.itemId &&
+      request.resource.data.locataireId == resource.data.locataireId &&
+      request.resource.data.proprietaireId == resource.data.proprietaireId &&
+      request.resource.data.dateDebut == resource.data.dateDebut &&
+      request.resource.data.dateFin == resource.data.dateFin &&
+      request.resource.data.prixTotal == resource.data.prixTotal &&
+      request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false; // jamais — traçabilité via statut CANCELLED
+    }
+
+    // ────────────────────────────────────────
+    // CONVERSATIONS
+    // ────────────────────────────────────────
+    // Lecture/écriture : seulement les participants de la conversation.
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() &&
+        request.auth.uid in resource.data.participants;
+
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participants;
+
+      allow update: if isSignedIn() &&
+        request.auth.uid in resource.data.participants;
+
+      allow delete: if false;
+
+      // ──────────────────────────
+      // MESSAGES (sous-collection)
+      // ──────────────────────────
+      match /messages/{messageId} {
+        // Lecture : participants de la conversation parent
+        allow read: if isSignedIn() &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+
+        // Création : participant de la conv ET senderId == soi-même
+        allow create: if isSignedIn() &&
+          request.auth.uid == request.resource.data.senderId &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+
+        // Mise à jour (ex: marquer comme lu) : participants
+        allow update: if isSignedIn() &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+
+        allow delete: if false;
+      }
+    }
+  }
+}

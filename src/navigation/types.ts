@@ -30,6 +30,7 @@ export type SearchStackParamList = {
 
 export type LocationsStackParamList = {
   MesLocations: { initialTab?: 'encours' | 'annonces' | 'demandes' } | undefined;
+  RentalDetail: { rentalId: string; role: 'locataire' | 'proprietaire' };
   ItemDetail: { item: MockItem };
   Reservation: { item: MockItem };
   Chat: ChatScreenParams;

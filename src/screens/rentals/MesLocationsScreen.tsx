@@ -19,7 +19,6 @@ import {
   getRentalsByProprietaire,
   updateRentalStatus,
   getUserById,
-  getItemById,
   getItemsByOwner,
   getOrCreateConversation,
   RentalData,
@@ -93,20 +92,11 @@ function LocationCard({
   navigation: NavProp;
 }) {
   const [contacting, setContacting] = useState(false);
-  const [navigating, setNavigating] = useState(false);
 
-  async function handlePress() {
-    if (navigating) return;
-    setNavigating(true);
-    try {
-      const item = await getItemById(rental.itemId);
-      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger cet objet.');
-    } finally {
-      setNavigating(false);
-    }
-  }
+  const isPasse =
+    rental.statut === StatutDemande.COMPLETED ||
+    rental.statut === StatutDemande.CANCELLED ||
+    rental.statut === StatutDemande.REJECTED;
 
   async function handleContact() {
     const uid = auth.currentUser?.uid;
@@ -135,8 +125,8 @@ function LocationCard({
 
   return (
     <TouchableOpacity
-      style={[styles.card, navigating && { opacity: 0.7 }]}
-      onPress={handlePress}
+      style={[styles.card, isPasse && { opacity: 0.65 }]}
+      onPress={() => navigation.navigate('RentalDetail', { rentalId: rental.id, role: 'locataire' })}
       activeOpacity={0.75}
     >
       <View style={styles.cardRow}>
@@ -158,7 +148,7 @@ function LocationCard({
         </View>
       </View>
 
-      {rental.statut === StatutDemande.ACCEPTED && (
+      {(rental.statut === StatutDemande.ACCEPTED || rental.statut === StatutDemande.IN_PROGRESS) && (
         <View style={styles.cardActions}>
           <TouchableOpacity
             style={[styles.btnGreen, contacting && { opacity: 0.6 }]}
@@ -187,7 +177,10 @@ function EnCoursTab({
   navigation: NavProp;
 }) {
   const active = rentals.filter(
-    (r) => r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED,
+    (r) =>
+      r.statut === StatutDemande.PENDING ||
+      r.statut === StatutDemande.ACCEPTED ||
+      r.statut === StatutDemande.IN_PROGRESS,
   );
   const passees = rentals.filter(
     (r) =>
@@ -313,7 +306,6 @@ function DemandeCard({
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
 }) {
-  const [navigating, setNavigating] = useState(false);
   const locataire = rental.otherUser;
   const initiales = getInitials(locataire);
   const avatarColor = avatarColorFromUid(rental.locataireId);
@@ -321,23 +313,10 @@ function DemandeCard({
     ? `${shortName(locataire)} veut louer`
     : 'Quelqu\'un veut louer';
 
-  async function handlePress() {
-    if (navigating) return;
-    setNavigating(true);
-    try {
-      const item = await getItemById(rental.itemId);
-      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger cet objet.');
-    } finally {
-      setNavigating(false);
-    }
-  }
-
   return (
     <TouchableOpacity
-      style={[styles.card, navigating && { opacity: 0.7 }]}
-      onPress={handlePress}
+      style={styles.card}
+      onPress={() => navigation.navigate('RentalDetail', { rentalId: rental.id, role: 'proprietaire' })}
       activeOpacity={0.75}
     >
       {/* Header : avatar + nom + badge */}
@@ -392,9 +371,9 @@ function DemandeCard({
   );
 }
 
-// ─── Tab 3 — AcceptedCard ────────────────────────────────────
+// ─── Tab 3 — ActiveDemandeCard (ACCEPTED + IN_PROGRESS) ──────
 
-function AcceptedCard({
+function ActiveDemandeCard({
   rental,
   navigation,
 }: {
@@ -402,25 +381,11 @@ function AcceptedCard({
   navigation: NavProp;
 }) {
   const [contacting, setContacting] = useState(false);
-  const [navigating, setNavigating] = useState(false);
 
   const locataire = rental.otherUser;
   const initiales = getInitials(locataire);
   const avatarColor = avatarColorFromUid(rental.locataireId);
   const locataireNom = fullName(locataire);
-
-  async function handleNavigateToItem() {
-    if (navigating) return;
-    setNavigating(true);
-    try {
-      const item = await getItemById(rental.itemId);
-      if (item) navigation.navigate('ItemDetail', { item: toMockItem(item) });
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger cet objet.');
-    } finally {
-      setNavigating(false);
-    }
-  }
 
   async function handleContact() {
     const uid = auth.currentUser?.uid;
@@ -446,10 +411,12 @@ function AcceptedCard({
     }
   }
 
+  const actionLabel = rental.statut === StatutDemande.IN_PROGRESS ? 'loue en cours' : 'loue';
+
   return (
     <TouchableOpacity
-      style={[styles.card, navigating && { opacity: 0.7 }]}
-      onPress={handleNavigateToItem}
+      style={styles.card}
+      onPress={() => navigation.navigate('RentalDetail', { rentalId: rental.id, role: 'proprietaire' })}
       activeOpacity={0.75}
     >
       {/* Header : avatar + nom + badge */}
@@ -459,11 +426,9 @@ function AcceptedCard({
         </View>
         <View style={styles.demandeInfo}>
           <Text style={styles.demandeTitre} numberOfLines={1}>{locataireNom}</Text>
-          <Text style={styles.demandeObjet} numberOfLines={1}>loue {rental.itemTitre}</Text>
+          <Text style={styles.demandeObjet} numberOfLines={1}>{actionLabel} {rental.itemTitre}</Text>
         </View>
-        <View style={[styles.badge, { backgroundColor: Colors.acceptedBg }]}>
-          <Text style={[styles.badgeText, { color: Colors.accepted }]}>Acceptée</Text>
-        </View>
+        <StatusBadge statut={rental.statut} />
       </View>
 
       {/* Dates + prix */}
@@ -496,6 +461,48 @@ function AcceptedCard({
   );
 }
 
+// ─── Tab 3 — PasseeDemandeCard (COMPLETED + REJECTED + CANCELLED) ─
+
+function PasseeDemandeCard({
+  rental,
+  navigation,
+}: {
+  rental: RentalWithOther;
+  navigation: NavProp;
+}) {
+  const locataire = rental.otherUser;
+  const initiales = getInitials(locataire);
+  const avatarColor = avatarColorFromUid(rental.locataireId);
+  const locataireNom = fullName(locataire);
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, { opacity: 0.65 }]}
+      onPress={() => navigation.navigate('RentalDetail', { rentalId: rental.id, role: 'proprietaire' })}
+      activeOpacity={0.75}
+    >
+      <View style={styles.demandeHeader}>
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <Text style={styles.avatarText}>{initiales}</Text>
+        </View>
+        <View style={styles.demandeInfo}>
+          <Text style={styles.demandeTitre} numberOfLines={1}>{locataireNom}</Text>
+          <Text style={styles.demandeObjet} numberOfLines={1}>demandé par {shortName(locataire)}</Text>
+        </View>
+        <StatusBadge statut={rental.statut} />
+      </View>
+
+      <View style={styles.demandeMeta}>
+        <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
+        <Text style={styles.demandeMetaText}>
+          {formatDateRange(rental.dateDebut, rental.dateFin)}
+          {' · '}{rental.prixTotal} MAD
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Tab 3 — DemandesTab ─────────────────────────────────────
 
 function DemandesTab({
@@ -510,13 +517,21 @@ function DemandesTab({
   onReject: (id: string) => void;
 }) {
   const enAttente = demandes.filter(r => r.statut === StatutDemande.PENDING);
-  const acceptees = demandes.filter(r => r.statut === StatutDemande.ACCEPTED);
+  const actives = demandes.filter(
+    r => r.statut === StatutDemande.ACCEPTED || r.statut === StatutDemande.IN_PROGRESS,
+  );
+  const passees = demandes.filter(
+    r =>
+      r.statut === StatutDemande.COMPLETED ||
+      r.statut === StatutDemande.REJECTED ||
+      r.statut === StatutDemande.CANCELLED,
+  );
 
-  if (enAttente.length === 0 && acceptees.length === 0) {
+  if (enAttente.length === 0 && actives.length === 0 && passees.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="notifications-outline" size={52} color={Colors.textTertiary} />
-        <Text style={styles.emptyTitle}>Aucune nouvelle demande</Text>
+        <Text style={styles.emptyTitle}>Aucune demande reçue</Text>
         <Text style={styles.emptySubtitle}>Les demandes de location apparaîtront ici</Text>
       </View>
     );
@@ -529,20 +544,31 @@ function DemandesTab({
     >
       {enAttente.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>En attente</Text>
+          <Text style={styles.sectionLabel}>EN ATTENTE</Text>
           {enAttente.map((r) => (
             <DemandeCard key={r.id} rental={r} navigation={navigation} onAccept={onAccept} onReject={onReject} />
           ))}
         </>
       )}
 
-      {acceptees.length > 0 && (
+      {actives.length > 0 && (
         <>
-          <Text style={[styles.sectionLabel, enAttente.length > 0 && { marginTop: Spacing.xl }]}>
-            Réservations acceptées
+          <Text style={[styles.sectionLabel, (enAttente.length > 0) && { marginTop: Spacing.xl }]}>
+            ACTIVES
           </Text>
-          {acceptees.map((r) => (
-            <AcceptedCard key={r.id} rental={r} navigation={navigation} />
+          {actives.map((r) => (
+            <ActiveDemandeCard key={r.id} rental={r} navigation={navigation} />
+          ))}
+        </>
+      )}
+
+      {passees.length > 0 && (
+        <>
+          <Text style={[styles.sectionLabel, (enAttente.length > 0 || actives.length > 0) && { marginTop: Spacing.xl }]}>
+            PASSÉES
+          </Text>
+          {passees.map((r) => (
+            <PasseeDemandeCard key={r.id} rental={r} navigation={navigation} />
           ))}
         </>
       )}
@@ -583,10 +609,7 @@ export default function MesLocationsScreen({ navigation, route }: Props) {
       ),
       Promise.all(
         recues
-          .filter((r) =>
-            (r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED) &&
-            r.locataireId && r.locataireId.length > 0,
-          )
+          .filter((r) => r.locataireId && r.locataireId.length > 0)
           .map(async (r) => ({
             ...r,
             otherUser: await getUserById(r.locataireId),
@@ -624,7 +647,10 @@ export default function MesLocationsScreen({ navigation, route }: Props) {
   );
 
   const enCoursCount = mesLocations.filter(
-    (r) => r.statut === StatutDemande.PENDING || r.statut === StatutDemande.ACCEPTED,
+    (r) =>
+      r.statut === StatutDemande.PENDING ||
+      r.statut === StatutDemande.ACCEPTED ||
+      r.statut === StatutDemande.IN_PROGRESS,
   ).length;
 
   const TABS: { id: Tab; label: string; count: number }[] = [

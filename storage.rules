@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Items : images uploadées dans items/{itemId}/image_N.jpg
+    // L'ownership fin (vérifier que l'uploader est bien le proprio de l'item)
+    // nécessiterait un cross-collection lookup non supporté par Storage Rules.
+    // On ouvre l'écriture à tout user authentifié ; la sécurité métier est
+    // garantie côté Firestore (seul le proprio peut créer/modifier l'item).
+    match /items/{itemId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Avatars : path avatars/{uid}.jpg — un user ne peut modifier que SA photo.
+    // Le split('.')[0] extrait le uid du nom de fichier "abc123.jpg" → "abc123".
+    match /avatars/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId.split('.')[0];
+    }
+
+    // Images de chat : conversations/{conversationId}/{timestamp}.jpg
+    // La sécurité fine (participant only) est garantie par les Firestore Rules
+    // sur la conversation elle-même. Storage ouvre à tout user authentifié.
+    match /conversations/{conversationId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}

@@ -42,7 +42,16 @@ export interface RentalData {
   prixTotal: number;
   message: string;
   statut: StatutDemande;
+  // Workflow remise
+  remiseProprio?: boolean;
+  remiseLocataire?: boolean;
+  remiseAt?: Date;
+  // Workflow retour
+  retourLocataire?: boolean;
+  retourProprio?: boolean;
+  retourAt?: Date;
   createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
@@ -171,7 +180,7 @@ export const createRental = async (
 /**
  * Récupérer les demandes reçues (pour le propriétaire)
  */
-export const getReceivedRentals = async (ownerId: string): Promise<Rental[]> => {
+export const getReceivedRentals = async (ownerId: string): Promise<RentalData[]> => {
   try {
     const q = query(
       collection(db, 'rentals'),
@@ -181,20 +190,7 @@ export const getReceivedRentals = async (ownerId: string): Promise<Rental[]> => 
 
     const snapshot = await getDocs(q);
 
-    return snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        itemId: data.itemId,
-        renterId: data.renterId,
-        ownerId: data.ownerId,
-        dateDebut: data.dateDebut.toDate(),
-        dateFin: data.dateFin.toDate(),
-        prixTotal: data.prixTotal,
-        statut: data.statut as StatutDemande,
-        dateCreation: data.dateCreation.toDate(),
-      };
-    });
+    return snapshot.docs.map(mapRentalDoc);
   } catch (error: any) {
     console.error('Erreur getReceivedRentals:', error);
     throw new Error('Impossible de récupérer les demandes');
@@ -377,7 +373,14 @@ function mapRentalDoc(docSnap: QDS | DS): RentalData {
     prixTotal: data.prixTotal ?? 0,
     message: data.message ?? '',
     statut: data.statut as StatutDemande,
+    remiseProprio: data.remiseProprio ?? false,
+    remiseLocataire: data.remiseLocataire ?? false,
+    remiseAt: data.remiseAt instanceof Timestamp ? data.remiseAt.toDate() : undefined,
+    retourLocataire: data.retourLocataire ?? false,
+    retourProprio: data.retourProprio ?? false,
+    retourAt: data.retourAt instanceof Timestamp ? data.retourAt.toDate() : undefined,
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : undefined,
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : undefined,
   };
 }
 
@@ -478,6 +481,91 @@ export const updateRentalStatus = async (
   } catch (error) {
     console.error('Erreur updateRentalStatus:', error);
     throw new Error('Impossible de mettre à jour le statut');
+  }
+};
+
+/**
+ * Récupérer une location par son id
+ */
+export const getRentalById = async (rentalId: string): Promise<RentalData | null> => {
+  try {
+    const docSnap = await getDoc(doc(db, 'rentals', rentalId));
+    if (!docSnap.exists()) return null;
+    return mapRentalDoc(docSnap);
+  } catch (error) {
+    console.error('Erreur getRentalById:', error);
+    return null;
+  }
+};
+
+/**
+ * Confirmer la remise de l'objet (double confirmation proprio + locataire)
+ * Quand les deux ont confirmé → statut passe à IN_PROGRESS
+ */
+export const confirmerRemise = async (
+  rentalId: string,
+  role: 'proprietaire' | 'locataire',
+): Promise<void> => {
+  const ref = doc(db, 'rentals', rentalId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data();
+
+  const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  if (role === 'proprietaire') updates.remiseProprio = true;
+  else updates.remiseLocataire = true;
+
+  const newRemiseProprio = (updates.remiseProprio as boolean | undefined) ?? data.remiseProprio ?? false;
+  const newRemiseLocataire = (updates.remiseLocataire as boolean | undefined) ?? data.remiseLocataire ?? false;
+
+  if (newRemiseProprio && newRemiseLocataire) {
+    updates.statut = StatutDemande.IN_PROGRESS;
+    updates.remiseAt = serverTimestamp();
+  }
+
+  await updateDoc(ref, updates);
+};
+
+/**
+ * Confirmer le retour de l'objet (double confirmation proprio + locataire)
+ * Quand les deux ont confirmé → statut passe à COMPLETED
+ */
+export const confirmerRetour = async (
+  rentalId: string,
+  role: 'proprietaire' | 'locataire',
+): Promise<void> => {
+  const ref = doc(db, 'rentals', rentalId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data();
+
+  const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  if (role === 'locataire') updates.retourLocataire = true;
+  else updates.retourProprio = true;
+
+  const newRetourLocataire = (updates.retourLocataire as boolean | undefined) ?? data.retourLocataire ?? false;
+  const newRetourProprio = (updates.retourProprio as boolean | undefined) ?? data.retourProprio ?? false;
+
+  if (newRetourLocataire && newRetourProprio) {
+    updates.statut = StatutDemande.COMPLETED;
+    updates.retourAt = serverTimestamp();
+  }
+
+  await updateDoc(ref, updates);
+};
+
+/**
+ * Annuler une location (locataire, avant remise)
+ */
+export const annulerLocation = async (rentalId: string): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'rentals', rentalId), {
+      statut: StatutDemande.CANCELLED,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Erreur annulerLocation:', error);
+    throw new Error('Impossible d\'annuler la location');
   }
 };
 
