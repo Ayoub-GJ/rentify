@@ -14,7 +14,7 @@ export type AuthStackParamList = {
 };
 
 export type HomeStackParamList = {
-  Home: undefined;
+  HomeScreen: undefined;
   Messages: undefined;
   ItemDetail: { item: MockItem };
   Reservation: { item: MockItem };

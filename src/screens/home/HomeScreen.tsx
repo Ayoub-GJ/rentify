@@ -49,7 +49,7 @@ function toMockItem(item: Item): MockItem {
   };
 }
 
-type HomeNavProp = StackNavigationProp<HomeStackParamList, 'Home'>;
+type HomeNavProp = StackNavigationProp<HomeStackParamList, 'HomeScreen'>;
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
 const CHIPS = [ALL_CHIP, ...Categories] as const;

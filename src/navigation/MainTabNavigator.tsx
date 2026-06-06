@@ -63,7 +63,7 @@ export default function MainTabNavigator() {
         name="Home"
         component={HomeStackNavigator}
         options={({ route }) => {
-          const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Home';
+          const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'HomeScreen';
           const hideTabBar = focusedRoute === 'ItemDetail' || focusedRoute === 'Reservation' || focusedRoute === 'Chat' || focusedRoute === 'Messages';
           return {
             tabBarLabel: 'Accueil',

@@ -386,7 +386,7 @@ export default function ProfileScreen() {
               icon="chatbubble-outline"
               label="Messages"
               onPress={() =>
-                (navigation as any).getParent()?.navigate('Home', { screen: 'Messages' })
+                (navigation as any).navigate('Home', { screen: 'Messages' })
               }
             />
             <ActionRow
