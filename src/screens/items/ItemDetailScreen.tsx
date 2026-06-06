@@ -91,7 +91,7 @@ export default function ItemDetailScreen() {
         if (!uid) { setContext({ kind: 'visitor' }); return; }
 
         if (uid === item.proprietaireId) {
-          const count = await countPendingRentalsForItem(item.id);
+          const count = await countPendingRentalsForItem(item.id, uid);
           setContext(count > 0
             ? { kind: 'owner_with_requests', count }
             : { kind: 'owner_idle' },

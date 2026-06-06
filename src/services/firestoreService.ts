@@ -426,15 +426,30 @@ export const getRentalsByProprietaire = async (uid: string): Promise<RentalData[
 /**
  * Compter les demandes PENDING reçues sur un item
  */
-export const countPendingRentalsForItem = async (itemId: string): Promise<number> => {
+export const countPendingRentalsForItem = async (itemId: string, proprietaireId: string): Promise<number> => {
+  if (!proprietaireId) return 0;
   try {
-    const q = query(
-      collection(db, 'rentals'),
-      where('itemId', '==', itemId),
-      where('statut', '==', StatutDemande.PENDING),
-    );
-    const snap = await getDocs(q);
-    return snap.size;
+    // Dual-query : couvre docs avec proprietaireId (nouveau) et ownerId (legacy).
+    // Filtrer sur le champ du propriétaire est requis par les Security Rules :
+    // sans ce filtre Firestore rejette la collection-query (rule dépend de resource.data).
+    const [s1, s2] = await Promise.all([
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('itemId', '==', itemId),
+        where('proprietaireId', '==', proprietaireId),
+        where('statut', '==', StatutDemande.PENDING),
+      )),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('itemId', '==', itemId),
+        where('ownerId', '==', proprietaireId),
+        where('statut', '==', StatutDemande.PENDING),
+      )),
+    ]);
+    const ids = new Set<string>();
+    s1.docs.forEach(d => ids.add(d.id));
+    s2.docs.forEach(d => ids.add(d.id));
+    return ids.size;
   } catch (error) {
     console.error('Erreur countPendingRentalsForItem:', error);
     return 0;
