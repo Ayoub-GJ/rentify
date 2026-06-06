@@ -120,6 +120,7 @@ export default function AddItemScreen() {
   const loadedItemIdRef = useRef<string | null>(null);
 
   const isEditMode = editingItemId !== null;
+  const canSubmit = formData.photos.length >= 1;
 
   useFocusEffect(
     useCallback(() => {
@@ -257,6 +258,13 @@ export default function AddItemScreen() {
       Alert.alert('Erreur', 'Vous devez être connecté.');
       return;
     }
+    if (formData.photos.length === 0) {
+      Alert.alert(
+        'Photo requise',
+        'Veuillez ajouter au moins une photo de votre objet pour publier votre annonce.',
+      );
+      return;
+    }
     if (!formData.titre.trim() || !formData.description.trim() || !formData.prixParJour || !formData.categorie || !formData.ville.trim()) {
       Alert.alert('Champs manquants', 'Remplis tous les champs obligatoires.');
       return;
@@ -339,17 +347,28 @@ export default function AddItemScreen() {
           text: 'Supprimer',
           style: 'destructive',
           onPress: async () => {
+            const uid = auth.currentUser?.uid;
+            if (!uid) return;
             setUploading(true);
             try {
-              await softDeleteItem(editingItemId);
+              await softDeleteItem(editingItemId, uid);
               setUploading(false);
               loadedItemIdRef.current = null;
-              Alert.alert('Annonce supprimée', 'Votre annonce a été supprimée.', [
+              Alert.alert('Annonce supprimée', 'Votre annonce a été retirée.', [
                 { text: 'OK', onPress: goBack },
               ]);
-            } catch {
+            } catch (e: any) {
               setUploading(false);
-              Alert.alert('Erreur', "Impossible de supprimer l'annonce.");
+              if (e.message === 'ITEM_HAS_ACTIVE_RENTALS') {
+                Alert.alert(
+                  'Suppression impossible',
+                  'Cette annonce a des locations en cours ou en attente. ' +
+                  'Attendez qu\'elles soient terminées ou annulées pour pouvoir supprimer.',
+                  [{ text: 'OK' }],
+                );
+              } else {
+                Alert.alert('Erreur', 'Impossible de supprimer pour le moment.');
+              }
             }
           },
         },
@@ -362,33 +381,38 @@ export default function AddItemScreen() {
   function renderStep1() {
     return (
       <View style={styles.stepContent}>
-        <TouchableOpacity style={styles.uploadZone} onPress={pickImage} activeOpacity={0.8}>
-          <Ionicons name="camera" size={40} color={Colors.textTertiary} />
-          <Text style={styles.uploadTitle}>Ajouter des photos</Text>
-          <Text style={styles.uploadSub}>Maximum 5 photos</Text>
-        </TouchableOpacity>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>
+            Photos <Text style={styles.labelRequired}>*</Text>
+          </Text>
+          <TouchableOpacity style={styles.uploadZone} onPress={pickImage} activeOpacity={0.8}>
+            <Ionicons name="camera" size={40} color={Colors.textTertiary} />
+            <Text style={styles.uploadTitle}>Ajouter des photos</Text>
+            <Text style={styles.uploadSub}>Maximum 5 · Au moins 1 requise</Text>
+          </TouchableOpacity>
 
-        {formData.photos.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.photosRow}
-            contentContainerStyle={{ gap: Spacing.sm, paddingHorizontal: 2 }}
-          >
-            {formData.photos.map((uri, idx) => (
-              <View key={idx} style={styles.photoThumb}>
-                <Image source={{ uri }} style={styles.photoImage} />
-                <TouchableOpacity
-                  style={styles.removePhoto}
-                  onPress={() => removePhoto(idx)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="close-circle" size={20} color={Colors.error} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        )}
+          {formData.photos.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.photosRow}
+              contentContainerStyle={{ gap: Spacing.sm, paddingHorizontal: 2 }}
+            >
+              {formData.photos.map((uri, idx) => (
+                <View key={idx} style={styles.photoThumb}>
+                  <Image source={{ uri }} style={styles.photoImage} />
+                  <TouchableOpacity
+                    style={styles.removePhoto}
+                    onPress={() => removePhoto(idx)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close-circle" size={20} color={Colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
         <View style={styles.fieldGroup}>
           <View style={styles.labelRow}>
@@ -634,7 +658,7 @@ export default function AddItemScreen() {
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
         {currentStep === 3 ? (
           <TouchableOpacity
-            style={[styles.btnPublish, uploading && { opacity: 0.7 }]}
+            style={[styles.btnPublish, (!canSubmit || uploading) && styles.btnPublishDisabled]}
             onPress={handleSubmit}
             activeOpacity={0.88}
             disabled={uploading}
@@ -804,6 +828,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontSubheading,
     fontSize: Typography.size.sm,
     color: Colors.textPrimary,
+  },
+  labelRequired: {
+    color: Colors.error,
   },
   counter: {
     fontFamily: Typography.fontBody,
@@ -1008,6 +1035,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.button,
+  },
+  btnPublishDisabled: {
+    backgroundColor: Colors.border,
+    opacity: 0.5,
+    ...Shadows.none,
   },
   btnPrimaryText: {
     fontFamily: Typography.fontHeading,
