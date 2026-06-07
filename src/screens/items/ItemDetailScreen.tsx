@@ -503,8 +503,10 @@ export default function ItemDetailScreen() {
               </View>
               {item.periodeMin && item.periodeMin > 1 && (
                 <View style={styles.detailChip}>
-                  <Ionicons name="time-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.detailChipText}>Min {item.periodeMin} jours</Text>
+                  <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
+                  <Text style={[styles.detailChipText, { fontFamily: Typography.fontBody }]}>
+                    Location minimum : {item.periodeMin} jours
+                  </Text>
                 </View>
               )}
             </View>

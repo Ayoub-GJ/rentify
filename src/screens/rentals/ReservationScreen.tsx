@@ -128,41 +128,51 @@ export default function ReservationScreen() {
   }
 
   // ── Date selection logic ──────────────────────────────────
+
+  function suggestEnd(start: Date) {
+    const min = item.periodeMin && item.periodeMin > 1 ? item.periodeMin : null;
+    if (min) {
+      const s = new Date(start);
+      s.setDate(s.getDate() + min);
+      setEndDate(startOfDay(s));
+    } else {
+      setEndDate(null);
+    }
+  }
+
   function handleDayPress(day: number) {
     const pressed = startOfDay(new Date(year, month, day));
     if (pressed < today) return;
 
-    if (!startDate || (startDate && endDate)) {
-      // Fresh start
+    if (!startDate) {
+      // No start yet — set start, auto-suggest end
+      setStartDate(pressed);
+      suggestEnd(pressed);
+      return;
+    }
+
+    if (pressed <= startDate) {
+      // Tapped on or before start — reset start, auto-suggest new end
       setStartDate(pressed);
       setEndDate(null);
-    } else {
-      // startDate set, endDate not yet
-      if (pressed <= startDate) {
-        setStartDate(pressed);
-        setEndDate(null);
-      } else {
-        setEndDate(pressed);
-      }
+      suggestEnd(pressed);
+      return;
     }
+
+    // Tapped after start — free end-date choice (no lock)
+    setEndDate(pressed);
   }
 
   // ── Derived values ────────────────────────────────────────
   const duration = startDate && endDate ? diffDays(startDate, endDate) : 0;
   const total = duration * item.prixParJour;
   const canReserve = startDate !== null && endDate !== null && duration > 0;
+  const minDays = item.periodeMin && item.periodeMin > 1 ? item.periodeMin : 0;
+  const minDaysViolation = minDays > 0 && duration > 0 && duration < minDays;
+  const canConfirm = canReserve && !minDaysViolation;
 
   async function handleConfirm() {
     if (!auth.currentUser || !startDate || !endDate) return;
-
-    if (item.periodeMin && duration < item.periodeMin) {
-      Alert.alert(
-        'Durée trop courte',
-        `Cet objet doit être loué pour au moins ${item.periodeMin} jours.`,
-      );
-      return;
-    }
-
     setLoading(true);
     try {
       const fullItem = await getItemById(item.id);
@@ -401,6 +411,17 @@ export default function ReservationScreen() {
           </Text>
         </Animated.View>
 
+        {/* ── Avertissement durée minimum ── */}
+        {minDaysViolation && (
+          <View style={styles.minDaysAlert}>
+            <Ionicons name="warning-outline" size={18} color={Colors.warning} />
+            <Text style={styles.minDaysAlertText}>
+              Le propriétaire demande au minimum {minDays} jour{minDays > 1 ? 's' : ''} de
+              location. Vous avez sélectionné {duration} jour{duration > 1 ? 's' : ''}.
+            </Text>
+          </View>
+        )}
+
         {/* ── Message optionnel ── */}
         <View style={styles.messageSection}>
           <Text style={styles.messageLabel}>
@@ -437,10 +458,13 @@ export default function ReservationScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.confirmBtn, loading && { opacity: 0.7 }]}
-              activeOpacity={0.88}
-              onPress={handleConfirm}
-              disabled={loading}
+              style={[
+                styles.confirmBtn,
+                (loading || minDaysViolation) && { opacity: 0.5 },
+              ]}
+              activeOpacity={minDaysViolation ? 1 : 0.88}
+              onPress={canConfirm ? handleConfirm : undefined}
+              disabled={loading || minDaysViolation}
             >
               {loading ? (
                 <ActivityIndicator color={Colors.textInverse} />
@@ -669,5 +693,26 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBodyMedium,
     fontSize: 15,
     color: Colors.textTertiary,
+  },
+
+  // Min-days warning
+  minDaysAlert: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    backgroundColor: Colors.warningLight,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+    borderRadius: Radius.sm,
+    padding: Spacing.md,
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  minDaysAlertText: {
+    flex: 1,
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    lineHeight: Typography.size.sm * 1.5,
   },
 });
