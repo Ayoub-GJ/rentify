@@ -10,6 +10,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   Timestamp,
   serverTimestamp,
@@ -18,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db, storage } from '../config/firebase.config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User, Message } from '../types';
+import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User, Message, Review } from '../types';
 
 // ─── UserStats ────────────────────────────────────────────────
 export interface UserStats {
@@ -252,6 +253,8 @@ function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapsho
         ? new Date(data.datePublication)
         : new Date(),
     periodeMin: data.periodeMin ? Number(data.periodeMin) : undefined,
+    averageRating: data.averageRating ?? undefined,
+    reviewsCount: data.reviewsCount ?? undefined,
   };
 }
 
@@ -809,12 +812,23 @@ export const getUserStats = async (uid: string): Promise<UserStats> => {
     earningsS2.docs.forEach(d => { if (!earningsMap.has(d.id)) earningsMap.set(d.id, d.data().prixTotal ?? 0); });
     const earningsTotal = Array.from(earningsMap.values()).reduce((sum, v) => sum + v, 0);
 
+    const reviewsSnap = await getDocs(query(
+      collection(db, 'reviews'),
+      where('proprietaireId', '==', uid),
+    ));
+    const reviewsCount = reviewsSnap.size;
+    const averageRating = reviewsCount > 0
+      ? Math.round(
+          reviewsSnap.docs.reduce((sum, d) => sum + (d.data().rating as number), 0) / reviewsCount * 10,
+        ) / 10
+      : 0;
+
     return {
       itemsCount: items.length,
       rentalsCount: rentalsLocSnap.size,
       earningsTotal,
-      averageRating: 0,
-      reviewsCount: 0,
+      averageRating,
+      reviewsCount,
     };
   } catch (error) {
     console.error('Erreur getUserStats:', error);
@@ -1033,4 +1047,125 @@ export const getUserFavoritesCount = async (userId: string): Promise<number> => 
   } catch {
     return 0;
   }
+};
+
+// ─── Reviews ──────────────────────────────────────────────────
+
+function mapDocToReview(d: QDS | DS): Review {
+  const data = d.data()!;
+  return {
+    id: d.id,
+    rentalId: data.rentalId,
+    itemId: data.itemId,
+    itemTitre: data.itemTitre ?? '',
+    proprietaireId: data.proprietaireId,
+    locataireId: data.locataireId,
+    locataireName: data.locataireName ?? '',
+    rating: data.rating,
+    commentaire: data.commentaire ?? '',
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
+  };
+}
+
+export const createReview = async (params: {
+  rentalId: string;
+  itemId: string;
+  itemTitre: string;
+  proprietaireId: string;
+  locataireId: string;
+  locataireName: string;
+  rating: number;
+  commentaire: string;
+}): Promise<string> => {
+  // Guard: one review per rental
+  const existing = await getDocs(query(
+    collection(db, 'reviews'),
+    where('rentalId', '==', params.rentalId),
+    limit(1),
+  ));
+  if (!existing.empty) throw new Error('REVIEW_ALREADY_EXISTS');
+
+  const docRef = await addDoc(collection(db, 'reviews'), {
+    ...params,
+    createdAt: serverTimestamp(),
+  });
+
+  // Update item's cached rating stats
+  try {
+    const itemReviews = await getDocs(query(
+      collection(db, 'reviews'),
+      where('itemId', '==', params.itemId),
+    ));
+    const count = itemReviews.size;
+    const avg = count > 0
+      ? Math.round(
+          itemReviews.docs.reduce((sum, d) => sum + (d.data().rating as number), 0) / count * 10,
+        ) / 10
+      : 0;
+    await updateDoc(doc(db, 'items', params.itemId), {
+      averageRating: avg,
+      reviewsCount: count,
+    });
+  } catch {
+    // Non-blocking: item rating update failure should not fail the review creation
+  }
+
+  return docRef.id;
+};
+
+export const getReviewByRental = async (rentalId: string): Promise<Review | null> => {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('rentalId', '==', rentalId),
+    limit(1),
+  ));
+  if (snap.empty) return null;
+  return mapDocToReview(snap.docs[0]);
+};
+
+export const getReviewsByProprietaire = async (proprietaireId: string): Promise<Review[]> => {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('proprietaireId', '==', proprietaireId),
+    orderBy('createdAt', 'desc'),
+  ));
+  return snap.docs.map(mapDocToReview);
+};
+
+export const getReviewsByItem = async (itemId: string): Promise<Review[]> => {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('itemId', '==', itemId),
+    orderBy('createdAt', 'desc'),
+  ));
+  return snap.docs.map(mapDocToReview);
+};
+
+export const getProprietaireRatingStats = async (
+  proprietaireId: string,
+): Promise<{ average: number; count: number }> => {
+  const reviews = await getReviewsByProprietaire(proprietaireId);
+  const count = reviews.length;
+  if (count === 0) return { average: 0, count: 0 };
+  const average = Math.round(reviews.reduce((s, r) => s + r.rating, 0) / count * 10) / 10;
+  return { average, count };
+};
+
+export const getReviewsByLocataire = async (locataireId: string): Promise<Review[]> => {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('locataireId', '==', locataireId),
+    orderBy('createdAt', 'desc'),
+  ));
+  return snap.docs.map(mapDocToReview);
+};
+
+export const getItemRatingStats = async (
+  itemId: string,
+): Promise<{ average: number; count: number }> => {
+  const reviews = await getReviewsByItem(itemId);
+  const count = reviews.length;
+  if (count === 0) return { average: 0, count: 0 };
+  const average = Math.round(reviews.reduce((s, r) => s + r.rating, 0) / count * 10) / 10;
+  return { average, count };
 };

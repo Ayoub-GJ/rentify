@@ -25,6 +25,8 @@ export interface Item {
   actif: boolean;                // Objet disponible ou non
   datePublication: Date;         // Date de publication
   periodeMin?: number;           // Durée minimum de location en jours (1 par défaut)
+  averageRating?: number;        // Moyenne des avis (0-5)
+  reviewsCount?: number;         // Nombre d'avis
 }
 
 // Type pour créer un nouvel objet

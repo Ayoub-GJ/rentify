@@ -40,6 +40,7 @@ export type LocationsStackParamList = {
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   MesFavoris: undefined;
+  MesAvis: undefined;
 };
 
 export type MainTabParamList = {

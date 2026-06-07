@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
 import SmartImage from '../../components/SmartImage';
 import RentalProgressStepper from '../../components/RentalProgressStepper';
+import ReviewModal from '../../components/ReviewModal';
+import StarRating from '../../components/StarRating';
 import {
   getRentalById,
   getUserById,
@@ -22,9 +24,10 @@ import {
   annulerLocation,
   updateRentalStatus,
   getOrCreateConversation,
+  getReviewByRental,
   RentalData,
 } from '../../services/firestoreService';
-import { StatutDemande, User, Item } from '../../types';
+import { StatutDemande, User, Item, Review } from '../../types';
 import type { MockItem } from '../../data/mockItems';
 import { auth } from '../../config/firebase.config';
 import { LocationsStackParamList } from '../../navigation/types';
@@ -143,6 +146,8 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [contacting, setContacting] = useState(false);
+  const [review, setReview] = useState<Review | null>(null);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
 
   const loadRental = useCallback(async () => {
     const r = await getRentalById(rentalId);
@@ -150,12 +155,14 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
     setRental(r);
 
     const otherId = role === 'locataire' ? r.proprietaireId : r.locataireId;
-    const [user, fetchedItem] = await Promise.all([
-      getUserById(otherId),
-      getItemById(r.itemId),
-    ]);
+    const fetches: Promise<any>[] = [getUserById(otherId), getItemById(r.itemId)];
+    if (role === 'locataire' && r.statut === StatutDemande.COMPLETED) {
+      fetches.push(getReviewByRental(r.id));
+    }
+    const [user, fetchedItem, existingReview] = await Promise.all(fetches);
     setOtherUser(user);
     setItem(fetchedItem);
+    if (existingReview !== undefined) setReview(existingReview);
     setLoading(false);
   }, [rentalId, role]);
 
@@ -368,8 +375,20 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
           onCancel={handleCancel}
           onConfirmerRemise={handleConfirmerRemise}
           onConfirmerRetour={handleConfirmerRetour}
+          review={review}
+          onOpenReviewModal={() => setReviewModalVisible(true)}
         />
       </ScrollView>
+
+      {rental && role === 'locataire' && (
+        <ReviewModal
+          visible={reviewModalVisible}
+          onClose={() => setReviewModalVisible(false)}
+          rental={rental}
+          proprietaire={otherUser}
+          onSubmitSuccess={() => getReviewByRental(rental.id).then(setReview)}
+        />
+      )}
     </View>
   );
 }
@@ -385,6 +404,8 @@ function ActionsSection({
   onCancel,
   onConfirmerRemise,
   onConfirmerRetour,
+  review,
+  onOpenReviewModal,
 }: {
   rental: RentalData;
   role: 'locataire' | 'proprietaire';
@@ -394,6 +415,8 @@ function ActionsSection({
   onCancel: () => void;
   onConfirmerRemise: () => void;
   onConfirmerRetour: () => void;
+  review?: Review | null;
+  onOpenReviewModal?: () => void;
 }) {
   const { statut } = rental;
 
@@ -509,12 +532,34 @@ function ActionsSection({
   // COMPLETED
   if (statut === StatutDemande.COMPLETED) {
     return (
-      <View style={styles.completedCard}>
-        <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
-        <Text style={styles.completedText}>
-          Location terminée{rental.retourAt ? ` le ${formatDateShort(rental.retourAt)}` : ''}
-        </Text>
-        {/* TODO: ajouter "Laisser un avis" quand le système d'avis sera implémenté */}
+      <View style={{ gap: Spacing.md }}>
+        <View style={styles.completedCard}>
+          <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+          <Text style={styles.completedText}>
+            Location terminée{rental.retourAt ? ` le ${formatDateShort(rental.retourAt)}` : ''}
+          </Text>
+        </View>
+
+        {role === 'locataire' && (
+          review ? (
+            <SectionCard>
+              <SectionTitle label="Mon avis" />
+              <StarRating value={review.rating} size={18} />
+              {!!review.commentaire && (
+                <Text style={styles.reviewCommentaire}>{review.commentaire}</Text>
+              )}
+            </SectionCard>
+          ) : (
+            <TouchableOpacity
+              style={styles.reviewBtn}
+              onPress={onOpenReviewModal}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="star-outline" size={18} color={Colors.primary} />
+              <Text style={styles.reviewBtnText}>Laisser un avis</Text>
+            </TouchableOpacity>
+          )
+        )}
       </View>
     );
   }
@@ -826,5 +871,31 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.md,
     color: Colors.success,
     flex: 1,
+  },
+
+  // ── Review ──
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: 48,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+    ...Shadows.sm,
+  },
+  reviewBtnText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.md,
+    color: Colors.primary,
+  },
+  reviewCommentaire: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    marginTop: Spacing.sm,
   },
 });

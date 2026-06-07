@@ -402,10 +402,9 @@ export default function ProfileScreen() {
             <ActionRow
               icon="star-outline"
               label="Mes avis"
+              badge={(stats?.reviewsCount ?? 0) > 0 ? String(stats!.reviewsCount) : undefined}
               isLast
-              onPress={() =>
-                Alert.alert('Bientôt disponible', 'Le système d\'avis sera disponible après le MVP.')
-              }
+              onPress={() => (navigation as any).navigate('MesAvis')}
             />
           </View>
         </View>

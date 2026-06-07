@@ -129,6 +129,17 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────
+    // REVIEWS
+    // ────────────────────────────────────────
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.auth.uid == request.resource.data.locataireId;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ────────────────────────────────────────
     // FAVORITES
     // ────────────────────────────────────────
     match /favorites/{favoriteId} {

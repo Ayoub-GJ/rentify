@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
+import StarRating from '../../components/StarRating';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -103,6 +104,9 @@ function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
             {item.prixParJour} MAD
             <Text style={styles.cardPriceUnit}> /jour</Text>
           </Text>
+          {(item.averageRating ?? 0) > 0 && (
+            <StarRating value={item.averageRating!} size={11} showCount count={item.reviewsCount} />
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -513,6 +517,7 @@ const styles = StyleSheet.create({
   },
   cardFooter: {
     marginTop: Spacing.xs,
+    gap: Spacing.xs,
   },
   cardPrice: {
     fontFamily: Typography.fontDisplay,
