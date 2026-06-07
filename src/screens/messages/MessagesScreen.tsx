@@ -90,6 +90,7 @@ export default function MessagesScreen() {
       itemTitre: conv.itemTitre,
       itemImage: '',
       otherUserName: fullName(conv.otherUser),
+      itemId: conv.itemId,
     });
   };
 
@@ -157,9 +158,17 @@ export default function MessagesScreen() {
                       <Text style={styles.time}>{timeLabel}</Text>
                     ) : null}
                   </View>
-                  <Text style={styles.itemTitre} numberOfLines={1}>
-                    {item.itemTitre}
-                  </Text>
+                  <View style={styles.itemTitreRow}>
+                    {item.itemDeleted && (
+                      <Ionicons name="archive-outline" size={13} color={Colors.textTertiary} />
+                    )}
+                    <Text style={styles.itemTitre} numberOfLines={1}>
+                      {item.itemTitre}
+                      {item.itemDeleted ? (
+                        <Text style={styles.deletedSuffix}> (supprimée)</Text>
+                      ) : null}
+                    </Text>
+                  </View>
                   {renderLastMessage(item.lastMessage)}
                 </View>
 
@@ -282,6 +291,17 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     color: Colors.primary,
     fontFamily: Typography.fontBodyMedium,
+    flex: 1,
+  },
+  itemTitreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  deletedSuffix: {
+    fontSize: Typography.size.xs,
+    color: Colors.textTertiary,
+    fontFamily: Typography.fontBody,
   },
   separator: {
     height: 1,

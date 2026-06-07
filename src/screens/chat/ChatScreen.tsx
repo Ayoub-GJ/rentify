@@ -24,6 +24,7 @@ import {
   subscribeToMessages,
   sendMessage,
   uploadChatImage,
+  getItemById,
 } from '../../services/firestoreService';
 import { Message } from '../../types';
 import {
@@ -162,7 +163,7 @@ function MessageBubble({
 export default function ChatScreen() {
   const navigation = useNavigation();
   const route = useRoute<ChatRoute>();
-  const { conversationId, itemTitre, itemImage, otherUserName } = route.params;
+  const { conversationId, itemTitre, itemImage, otherUserName, itemId } = route.params;
   const insets = useSafeAreaInsets();
 
   const currentUid = auth.currentUser?.uid ?? '';
@@ -170,6 +171,8 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [sendingImage, setSendingImage] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [itemDeleted, setItemDeleted] = useState(false);
+  const [isItemOwner, setIsItemOwner] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -178,6 +181,18 @@ export default function ChatScreen() {
     });
     return () => unsubscribe();
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!itemId) return;
+    getItemById(itemId).then((item) => {
+      if (item === null || item.actif === false) {
+        setItemDeleted(true);
+        setIsItemOwner(
+          item?.proprietaireId === currentUid || item?.ownerId === currentUid,
+        );
+      }
+    });
+  }, [itemId, currentUid]);
 
   // ── Send text ──
 
@@ -264,6 +279,18 @@ export default function ChatScreen() {
             <Text style={styles.bannerTitle} numberOfLines={1}>{itemTitre}</Text>
           </View>
         </View>
+
+        {/* Deleted item notice */}
+        {itemDeleted && (
+          <View style={styles.deletedNotice}>
+            <Ionicons name="information-circle-outline" size={18} color={Colors.cancelled} />
+            <Text style={styles.deletedNoticeText}>
+              {isItemOwner
+                ? 'Cet objet est archivé dans vos annonces.'
+                : "Cet objet n'est plus disponible. Il a été supprimé par le propriétaire."}
+            </Text>
+          </View>
+        )}
 
         {/* Messages */}
         <FlatList
@@ -426,6 +453,21 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontHeading,
     fontSize: 13,
     color: Colors.textPrimary,
+  },
+  deletedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.cancelledBg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  deletedNoticeText: {
+    flex: 1,
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.cancelled,
+    lineHeight: Typography.size.sm * 1.4,
   },
 
   // Messages list

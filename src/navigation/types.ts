@@ -6,6 +6,7 @@ export type ChatScreenParams = {
   itemTitre: string;
   itemImage: string;
   otherUserName: string;
+  itemId?: string;
 };
 
 export type AuthStackParamList = {

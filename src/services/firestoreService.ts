@@ -330,11 +330,21 @@ export const getItemsByOwner = async (ownerId: string): Promise<Item[]> => {
 };
 
 /**
- * Soft-delete : désactive l'annonce sans la supprimer (actif + disponible = false)
+ * Soft-delete : désactive l'annonce sans la supprimer.
+ * Vérifie d'abord qu'il n'y a aucune location active (PENDING/ACCEPTED/IN_PROGRESS).
+ * Throws 'ITEM_HAS_ACTIVE_RENTALS' si des locations actives existent.
  */
-export const softDeleteItem = async (itemId: string): Promise<void> => {
+export const softDeleteItem = async (itemId: string, proprietaireId: string): Promise<void> => {
+  const activeCount = await countActiveRentalsForItem(itemId, proprietaireId);
+  if (activeCount > 0) {
+    throw new Error('ITEM_HAS_ACTIVE_RENTALS');
+  }
   try {
-    await updateDoc(doc(db, 'items', itemId), { actif: false, disponible: false });
+    await updateDoc(doc(db, 'items', itemId), {
+      actif: false,
+      disponible: false,
+      deletedAt: serverTimestamp(),
+    });
   } catch (error) {
     console.error('Erreur softDeleteItem:', error);
     throw new Error("Impossible de supprimer l'annonce");
@@ -420,6 +430,39 @@ export const getRentalsByProprietaire = async (uid: string): Promise<RentalData[
   } catch (error) {
     console.error('Erreur getRentalsByProprietaire:', error);
     return [];
+  }
+};
+
+/**
+ * Compter les locations actives sur un item (PENDING + ACCEPTED + IN_PROGRESS).
+ * Bloque la suppression de l'annonce si > 0.
+ * Filtre par proprietaireId requis par les Security Rules (query constraint).
+ */
+export const countActiveRentalsForItem = async (itemId: string, proprietaireId: string): Promise<number> => {
+  if (!proprietaireId) return 0;
+  try {
+    const activeStatuts = [StatutDemande.PENDING, StatutDemande.ACCEPTED, StatutDemande.IN_PROGRESS];
+    const [s1, s2] = await Promise.all([
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('itemId', '==', itemId),
+        where('proprietaireId', '==', proprietaireId),
+        where('statut', 'in', activeStatuts),
+      )),
+      getDocs(query(
+        collection(db, 'rentals'),
+        where('itemId', '==', itemId),
+        where('ownerId', '==', proprietaireId),
+        where('statut', 'in', activeStatuts),
+      )),
+    ]);
+    const ids = new Set<string>();
+    s1.docs.forEach(d => ids.add(d.id));
+    s2.docs.forEach(d => ids.add(d.id));
+    return ids.size;
+  } catch (error) {
+    console.error('Erreur countActiveRentalsForItem:', error);
+    return 0;
   }
 };
 
@@ -835,6 +878,7 @@ export interface ConversationWithUser {
   lastMessageAt: Date;
   otherUserId: string;
   otherUser: User | null;
+  itemDeleted: boolean;
 }
 
 /**
@@ -853,11 +897,16 @@ export const getUserConversations = async (uid: string): Promise<ConversationWit
       snap.docs.map(async (d) => {
         const data = d.data();
         const otherUserId = ((data.participants ?? []) as string[]).find(p => p !== uid) ?? '';
-        const otherUser = otherUserId ? await getUserById(otherUserId) : null;
+        const itemId = data.itemId ?? '';
+        const [otherUser, item] = await Promise.all([
+          otherUserId ? getUserById(otherUserId) : Promise.resolve(null),
+          itemId ? getItemById(itemId) : Promise.resolve(null),
+        ]);
+        const itemDeleted = item === null || item.actif === false;
         return {
           id: d.id,
           participants: data.participants ?? [],
-          itemId: data.itemId ?? '',
+          itemId,
           itemTitre: data.itemTitre ?? '',
           lastMessage: data.lastMessage ?? '',
           lastMessageAt: data.lastMessageAt instanceof Timestamp
@@ -865,6 +914,7 @@ export const getUserConversations = async (uid: string): Promise<ConversationWit
             : new Date(0),
           otherUserId,
           otherUser,
+          itemDeleted,
         } as ConversationWithUser;
       }),
     );
