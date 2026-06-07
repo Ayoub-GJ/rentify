@@ -102,6 +102,11 @@ export default function MainTabNavigator() {
             </View>
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate('AddItem', { itemId: undefined });
+          },
+        })}
       />
       <Tab.Screen
         name="Locations"

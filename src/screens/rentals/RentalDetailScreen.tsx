@@ -289,7 +289,14 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
             onPress={() => item && navigation.navigate('ItemDetail', { item: toMockItem(item) })}
             activeOpacity={item ? 0.75 : 1}
           >
-            <SmartImage uri={rental.itemImage} style={styles.itemThumb} resizeMode="cover" />
+            <View>
+              <SmartImage uri={rental.itemImage} style={styles.itemThumb} resizeMode="cover" />
+              {item && !item.actif && (
+                <View style={styles.itemDeletedOverlay}>
+                  <Text style={styles.itemDeletedBadge}>Supprimé</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.itemInfo}>
               <Text style={styles.itemTitre} numberOfLines={2}>{rental.itemTitre}</Text>
               {item && (
@@ -587,6 +594,23 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: Radius.md,
+  },
+  itemDeletedOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.50)',
+    borderBottomLeftRadius: Radius.md,
+    borderBottomRightRadius: Radius.md,
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  itemDeletedBadge: {
+    fontFamily: Typography.fontSubheading,
+    fontSize: 10,
+    color: Colors.textInverse,
+    letterSpacing: 0.3,
   },
   itemInfo: {
     flex: 1,

@@ -355,7 +355,7 @@ export default function AddItemScreen() {
               setUploading(false);
               loadedItemIdRef.current = null;
               Alert.alert('Annonce supprimée', 'Votre annonce a été retirée.', [
-                { text: 'OK', onPress: goBack },
+                { text: 'OK', onPress: () => (navigation as any).dispatch(TabActions.jumpTo('Locations')) },
               ]);
             } catch (e: any) {
               setUploading(false);
@@ -586,18 +586,6 @@ export default function AddItemScreen() {
           </View>
         </View>
 
-        {isEditMode && (
-          <TouchableOpacity
-            style={[styles.btnDelete, uploading && { opacity: 0.5 }]}
-            onPress={handleDelete}
-            activeOpacity={0.85}
-            disabled={uploading}
-          >
-            <Ionicons name="trash-outline" size={18} color={Colors.error} />
-            <Text style={styles.btnDeleteText}>Supprimer l'annonce</Text>
-          </TouchableOpacity>
-        )}
-
         {!isEditMode && (
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={20} color={Colors.info} />
@@ -621,13 +609,25 @@ export default function AddItemScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={currentStep === 1 ? goBack : () => goToStep(currentStep - 1)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={[styles.headerTopRow, isEditMode && { justifyContent: 'space-between' }]}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={currentStep === 1 ? goBack : () => goToStep(currentStep - 1)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          {isEditMode && (
+            <TouchableOpacity
+              style={[styles.deleteBtn, uploading && { opacity: 0.4 }]}
+              onPress={handleDelete}
+              disabled={uploading}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="trash-outline" size={22} color={Colors.error} />
+            </TouchableOpacity>
+          )}
+        </View>
         <Text style={styles.headerTitle}>
           {isEditMode ? "Modifier l'annonce" : 'Publier un objet'}
         </Text>
@@ -717,7 +717,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     gap: Spacing.lg,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  deleteBtn: {
     width: 40,
     height: 40,
     borderRadius: Radius.full,

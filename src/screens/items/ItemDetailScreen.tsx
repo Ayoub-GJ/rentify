@@ -171,6 +171,29 @@ export default function ItemDetailScreen() {
   // ── Bannière contextuelle ──
   function renderBanner() {
     if (!context) return null;
+
+    // Objet archivé/supprimé : priorité sur toutes les autres bannières
+    if (!item.disponible) {
+      if (isOwn) {
+        return (
+          <View style={[styles.banner, { backgroundColor: Colors.warningLight }]}>
+            <Ionicons name="archive-outline" size={20} color={Colors.warning} />
+            <Text style={[styles.bannerText, { color: Colors.warning }]}>
+              Cette annonce est actuellement archivée
+            </Text>
+          </View>
+        );
+      }
+      return (
+        <View style={[styles.banner, { backgroundColor: Colors.surfaceAlt }]}>
+          <Ionicons name="close-circle-outline" size={20} color={Colors.textSecondary} />
+          <Text style={[styles.bannerText, { color: Colors.textSecondary }]}>
+            Cet objet n'est plus disponible à la location
+          </Text>
+        </View>
+      );
+    }
+
     switch (context.kind) {
       case 'owner_idle':
         return (
@@ -259,12 +282,17 @@ export default function ItemDetailScreen() {
               <Text style={styles.footerPriceUnit}>par jour</Text>
             </View>
             <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => navigation.navigate('Reservation', { item })}
-              style={styles.footerBtnPrimary}
+              activeOpacity={item.disponible ? 0.88 : 1}
+              onPress={item.disponible ? () => navigation.navigate('Reservation', { item }) : undefined}
+              style={[styles.footerBtnPrimary, !item.disponible && styles.footerBtnDisabled]}
+              disabled={!item.disponible}
             >
               <Text style={styles.footerBtnPrimaryText}>
-                {context.kind === 'tenant_completed' ? 'Réserver à nouveau' : 'Réserver'}
+                {!item.disponible
+                  ? 'Indisponible'
+                  : context.kind === 'tenant_completed'
+                    ? 'Réserver à nouveau'
+                    : 'Réserver'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -450,8 +478,14 @@ export default function ItemDetailScreen() {
             <Text style={styles.sectionTitle}>Détails</Text>
             <View style={styles.detailsGrid}>
               <View style={styles.detailChip}>
-                <Ionicons name="checkmark-circle" size={16} color={Colors.secondary} />
-                <Text style={styles.detailChipText}>Disponible</Text>
+                <Ionicons
+                  name={item.disponible ? 'checkmark-circle' : 'archive-outline'}
+                  size={16}
+                  color={item.disponible ? Colors.secondary : Colors.textTertiary}
+                />
+                <Text style={styles.detailChipText}>
+                  {item.disponible ? 'Disponible' : 'Archivé'}
+                </Text>
               </View>
               {categoryInfo && (
                 <View style={styles.detailChip}>
@@ -749,6 +783,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontFamily: Typography.fontHeading,
+  },
+  footerBtnDisabled: {
+    backgroundColor: Colors.border,
+    opacity: 0.6,
   },
   footerBtnOutline: {
     borderRadius: Radius.full,

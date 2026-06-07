@@ -243,11 +243,11 @@ function AnnonceCard({ item, navigation }: { item: Item; navigation: NavProp }) 
         <View style={styles.cardBody}>
           <View style={styles.cardTopRow}>
             <Text style={styles.cardTitle} numberOfLines={2}>{item.titre}</Text>
-            {item.actif && (
-              <View style={[styles.badge, { backgroundColor: Colors.acceptedBg }]}>
-                <Text style={[styles.badgeText, { color: Colors.accepted }]}>Actif</Text>
-              </View>
-            )}
+            <View style={[styles.badge, { backgroundColor: item.actif ? Colors.acceptedBg : Colors.cancelledBg }]}>
+              <Text style={[styles.badgeText, { color: item.actif ? Colors.accepted : Colors.cancelled }]}>
+                {item.actif ? 'Actif' : 'Archivée'}
+              </Text>
+            </View>
           </View>
           <Text style={styles.cardPrice}>{item.prixParJour} MAD/j</Text>
         </View>
