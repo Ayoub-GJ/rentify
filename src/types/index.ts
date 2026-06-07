@@ -3,3 +3,4 @@ export * from './User';
 export * from './Item';
 export * from './Rental';
 export * from './Message';
+export * from './Favorite';

@@ -16,6 +16,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
 import { getAllItems, getItemsByCategory, getUserBadges, UserBadges } from '../../services/firestoreService';
+import { useFavorite } from '../../hooks/useFavorite';
 import { auth } from '../../config/firebase.config';
 import { Item } from '../../types';
 import { MockItem } from '../../data/mockItems';
@@ -64,6 +65,8 @@ interface ItemCardProps {
 }
 
 function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
+  const { isFav, toggle } = useFavorite(item.id);
+
   return (
     <TouchableOpacity
       style={[styles.card, { width: cardWidth }]}
@@ -76,8 +79,12 @@ function ItemCard({ item, cardWidth, onPress }: ItemCardProps) {
           style={styles.cardImage}
           resizeMode="cover"
         />
-        <TouchableOpacity style={styles.heartButton} activeOpacity={0.8}>
-          <Ionicons name="heart-outline" size={16} color={Colors.textTertiary} />
+        <TouchableOpacity style={styles.heartButton} activeOpacity={0.8} onPress={toggle}>
+          <Ionicons
+            name={isFav ? 'heart' : 'heart-outline'}
+            size={16}
+            color={isFav ? Colors.error : Colors.textTertiary}
+          />
         </TouchableOpacity>
       </View>
 

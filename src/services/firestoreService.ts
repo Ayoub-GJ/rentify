@@ -4,6 +4,8 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
+  deleteDoc,
   updateDoc,
   query,
   where,
@@ -962,5 +964,73 @@ export const getUserBadges = async (uid: string): Promise<UserBadges> => {
   } catch (error) {
     console.error('Erreur getUserBadges:', error);
     return { pendingRequestsCount: 0, unreadMessagesCount: 0 };
+  }
+};
+
+// ─── Favorites ────────────────────────────────────────────────
+
+export const getUserFavoriteIds = async (userId: string): Promise<string[]> => {
+  if (!userId) return [];
+  const snap = await getDocs(query(
+    collection(db, 'favorites'),
+    where('userId', '==', userId),
+  ));
+  return snap.docs.map((d) => d.data().itemId as string);
+};
+
+export const addFavorite = async (userId: string, itemId: string): Promise<void> => {
+  const id = `${userId}_${itemId}`;
+  await setDoc(doc(db, 'favorites', id), {
+    userId,
+    itemId,
+    createdAt: serverTimestamp(),
+  }, { merge: true });
+};
+
+export const removeFavorite = async (userId: string, itemId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'favorites', `${userId}_${itemId}`));
+};
+
+export const isFavorite = async (userId: string, itemId: string): Promise<boolean> => {
+  const snap = await getDoc(doc(db, 'favorites', `${userId}_${itemId}`));
+  return snap.exists();
+};
+
+export const getUserFavorites = async (userId: string): Promise<Item[]> => {
+  if (!userId) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'favorites'),
+      where('userId', '==', userId),
+    ));
+    const items = await Promise.all(
+      snap.docs.map(async (d) => {
+        const { itemId } = d.data();
+        const item = await getItemById(itemId as string);
+        if (!item || item.actif === false) {
+          // Auto-cleanup: remove stale favorites pointing to deleted items
+          await deleteDoc(d.ref).catch(() => {});
+          return null;
+        }
+        return item;
+      }),
+    );
+    return items.filter((i): i is Item => i !== null);
+  } catch (error) {
+    console.error('Erreur getUserFavorites:', error);
+    return [];
+  }
+};
+
+export const getUserFavoritesCount = async (userId: string): Promise<number> => {
+  if (!userId) return 0;
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'favorites'),
+      where('userId', '==', userId),
+    ));
+    return snap.size;
+  } catch {
+    return 0;
   }
 };

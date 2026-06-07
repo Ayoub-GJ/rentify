@@ -15,6 +15,7 @@ import {
   countPendingRentalsForItem,
   getMyRentalForItem,
 } from '../../services/firestoreService';
+import { useFavorite } from '../../hooks/useFavorite';
 import { fullName, getInitials } from '../../utils/formatters';
 import { auth } from '../../config/firebase.config';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,7 +69,7 @@ export default function ItemDetailScreen() {
   const { item } = route.params;
   const insets = useSafeAreaInsets();
 
-  const [isFav, setIsFav] = useState(false);
+  const { isFav, toggle: toggleFav } = useFavorite(item.id);
   const [expanded, setExpanded] = useState(false);
   const [proprietaire, setProprietaire] = useState(item.proprietaire);
   const [loadingContact, setLoadingContact] = useState(false);
@@ -385,7 +386,7 @@ export default function ItemDetailScreen() {
 
           <TouchableOpacity
             style={[styles.heroButton, styles.heroButtonRight, { top: insets.top + Spacing.md }]}
-            onPress={() => setIsFav((v) => !v)}
+            onPress={toggleFav}
             activeOpacity={0.85}
           >
             <Ionicons

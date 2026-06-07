@@ -15,6 +15,7 @@ import {
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import AppNavigator from './src/navigation/AppNavigator';
+import { FavoritesProvider } from './src/contexts/FavoritesContext';
 // import { seedItems } from './src/utils/seedFirestore';
 
 SplashScreen.preventAutoHideAsync();
@@ -41,11 +42,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
-      </View>
+      <FavoritesProvider>
+        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </View>
+      </FavoritesProvider>
     </SafeAreaProvider>
   );
 }

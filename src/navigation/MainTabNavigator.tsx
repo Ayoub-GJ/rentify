@@ -10,7 +10,7 @@ import HomeStackNavigator from './HomeStackNavigator';
 import SearchStackNavigator from './SearchStackNavigator';
 import LocationsStackNavigator from './LocationsStackNavigator';
 import AddItemScreen from '../screens/items/AddItemScreen';
-import ProfileScreen from '../screens/profile/ProfileScreen';
+import ProfileStackNavigator from './ProfileStackNavigator';
 import { auth } from '../config/firebase.config';
 import { getUserBadges } from '../services/firestoreService';
 
@@ -133,7 +133,7 @@ export default function MainTabNavigator() {
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
+        component={ProfileStackNavigator}
         options={{
           tabBarLabel: 'Profil',
           tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (

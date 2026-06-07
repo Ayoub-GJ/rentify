@@ -37,12 +37,17 @@ export type LocationsStackParamList = {
   Chat: ChatScreenParams;
 };
 
+export type ProfileStackParamList = {
+  ProfileMain: undefined;
+  MesFavoris: undefined;
+};
+
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Recherche: NavigatorScreenParams<SearchStackParamList>;
   AddItem: { itemId?: string } | undefined;
   Locations: NavigatorScreenParams<LocationsStackParamList>;
-  Profile: undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 export type RootStackParamList = {

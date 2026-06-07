@@ -25,6 +25,7 @@ import {
   getUserStats,
   UserStats,
 } from '../../services/firestoreService';
+import { useFavorites } from '../../contexts/FavoritesContext';
 import { auth } from '../../config/firebase.config';
 import { User } from '../../types';
 import { fullName, getInitials, avatarColorFromUid } from '../../utils/formatters';
@@ -123,6 +124,9 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation();
+
+  const { favoriteIds } = useFavorites();
+  const favoritesCount = favoriteIds.size;
 
   const [profile, setProfile] = useState<User | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -392,10 +396,8 @@ export default function ProfileScreen() {
             <ActionRow
               icon="heart-outline"
               label="Favoris"
-              badge="0"
-              onPress={() =>
-                Alert.alert('Bientôt disponible', 'La liste des favoris arrive dans une prochaine version.')
-              }
+              badge={favoritesCount > 0 ? String(favoritesCount) : undefined}
+              onPress={() => (navigation as any).navigate('MesFavoris')}
             />
             <ActionRow
               icon="star-outline"
