@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db, storage } from '../config/firebase.config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Item, Rental, CreateRentalData, Categorie, StatutDemande, User, Message, Review } from '../types';
 
 // ─── UserStats ────────────────────────────────────────────────
@@ -66,20 +67,27 @@ export interface RentalData {
  */
 export const createItem = async (item: Omit<Item, 'id'>): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, 'items'), {
+    const docData: Record<string, unknown> = {
       titre: item.titre,
       description: item.description,
       categorie: item.categorie,
       prixParJour: item.prixParJour,
       ville: item.ville,
-      photoUrl: item.photoUrl,
+      photoUrl: '',
+      images: [],
+      averageRating: 0,
+      reviewsCount: 0,
       ownerId: item.ownerId,
       proprietaireId: item.proprietaireId ?? item.ownerId,
       proprietaire: item.proprietaire ?? null,
-      disponible: item.actif,
+      disponible: true,
+      actif: true,
       datePublication: Timestamp.fromDate(item.datePublication),
-      ...(item.periodeMin && item.periodeMin > 1 ? { periodeMin: item.periodeMin } : {}),
-    });
+      periodeMin: item.periodeMin && item.periodeMin > 1 ? item.periodeMin : 1,
+    };
+    if (item.latitude != null) docData.latitude = item.latitude;
+    if (item.longitude != null) docData.longitude = item.longitude;
+    const docRef = await addDoc(collection(db, 'items'), docData);
     return docRef.id;
   } catch (error: any) {
     console.error('Erreur createItem:', error);
@@ -255,6 +263,8 @@ function mapDocToItem(docSnap: import('firebase/firestore').QueryDocumentSnapsho
     periodeMin: data.periodeMin ? Number(data.periodeMin) : undefined,
     averageRating: data.averageRating ?? undefined,
     reviewsCount: data.reviewsCount ?? undefined,
+    latitude: data.latitude ?? undefined,
+    longitude: data.longitude ?? undefined,
   };
 }
 
@@ -661,28 +671,84 @@ export const getUserById = async (uid: string): Promise<User | null> => {
   }
 };
 
+async function compressImage(uri: string): Promise<string> {
+  try {
+    const ctx = ImageManipulator.ImageManipulator.manipulate(uri);
+    ctx.resize({ width: 1280 });
+    const imageRef = await ctx.renderAsync();
+    const result = await imageRef.saveAsync({ compress: 0.6, format: ImageManipulator.SaveFormat.JPEG });
+    console.log(`[compressImage] done → ${result.uri.slice(-30)}`);
+    return result.uri;
+  } catch (e) {
+    console.warn('[compressImage] failed, using original:', e);
+    return uri;
+  }
+}
+
+function uploadWithTimeout(
+  storageRef: ReturnType<typeof ref>,
+  blob: Blob,
+  timeoutMs = 45_000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Upload timeout après ${timeoutMs / 1000}s — vérifiez votre connexion`));
+      }
+    }, timeoutMs);
+
+    uploadBytes(storageRef, blob)
+      .then(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+  });
+}
+
 /**
- * Uploader les images d'un objet dans Firebase Storage
- * Retourne le tableau de download URLs
+ * Compresse puis uploade les images séquentiellement dans Firebase Storage.
+ * Retourne le tableau de download URLs (https://firebasestorage.googleapis.com/...)
  */
 export const uploadItemImages = async (
   localUris: string[],
-  itemId: string
+  itemId: string,
 ): Promise<string[]> => {
-  try {
-    const downloadURLs: string[] = [];
-    for (let i = 0; i < localUris.length; i++) {
-      const blob = await fetch(localUris[i]).then(r => r.blob());
-      const storageRef = ref(storage, `items/${itemId}/image_${i}.jpg`);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
-      downloadURLs.push(url);
+  const urls: string[] = [];
+  for (let i = 0; i < localUris.length; i++) {
+    const uri = localUris[i];
+    if (uri.startsWith('https://')) {
+      urls.push(uri);
+      continue;
     }
-    return downloadURLs;
-  } catch (error) {
-    console.error('Erreur uploadItemImages:', error);
-    throw new Error('Impossible d\'uploader les images');
+    console.log(`[uploadItemImages] ${i + 1}/${localUris.length} — compressing…`);
+    const compressedUri = await compressImage(uri);
+
+    console.log(`[uploadItemImages] ${i + 1}/${localUris.length} — fetching blob…`);
+    const response = await fetch(compressedUri);
+    if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
+    const blob = await response.blob();
+    console.log(`[uploadItemImages] ${i + 1}/${localUris.length} — blob ${blob.size} bytes, uploading…`);
+
+    const storageRef = ref(storage, `items/${itemId}/image_${i}_${Date.now()}.jpg`);
+    await uploadWithTimeout(storageRef, blob, 45_000);
+
+    const url = await getDownloadURL(storageRef);
+    console.log(`[uploadItemImages] ${i + 1}/${localUris.length} — done ✓`);
+    urls.push(url);
   }
+  return urls;
 };
 
 // ─── Chat / Conversations ─────────────────────────────────────

@@ -27,6 +27,8 @@ export interface Item {
   periodeMin?: number;           // Durée minimum de location en jours (1 par défaut)
   averageRating?: number;        // Moyenne des avis (0-5)
   reviewsCount?: number;         // Nombre d'avis
+  latitude?: number;             // Coordonnées GPS
+  longitude?: number;
 }
 
 // Type pour créer un nouvel objet

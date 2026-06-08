@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp, TabActions, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { useLocation } from '../../hooks/useLocation';
 import { getDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase.config';
 import {
@@ -121,6 +122,15 @@ export default function AddItemScreen() {
 
   const isEditMode = editingItemId !== null;
   const canSubmit = formData.photos.length >= 1;
+
+  const { location, loading: locLoading, permissionDenied } = useLocation();
+
+  // Pre-fill city from GPS when creating a new item and field is still empty
+  useEffect(() => {
+    if (!isEditMode && location?.city && !formData.ville) {
+      setFormData(prev => ({ ...prev, ville: location.city! }));
+    }
+  }, [location?.city, isEditMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -234,7 +244,7 @@ export default function AddItemScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'] as any,
       allowsMultipleSelection: true,
-      quality: 0.8,
+      quality: 0.5,
     });
     if (!result.canceled) {
       setFormData(prev => ({
@@ -277,7 +287,6 @@ export default function AddItemScreen() {
       const existingRemotePhotos = formData.photos.filter(p => p.startsWith('http'));
 
       if (isEditMode && editingItemId) {
-        // Upload new local images only
         let updatedImages = existingRemotePhotos;
         if (newLocalPhotos.length > 0) {
           const newUrls = await uploadItemImages(newLocalPhotos, editingItemId);
@@ -290,9 +299,8 @@ export default function AddItemScreen() {
           prixParJour: parseFloat(formData.prixParJour),
           ville: formData.ville,
           periodeMin: parseInt(formData.periodeMin, 10) || 1,
-          ...(updatedImages.length > 0 ? { images: updatedImages } : {}),
+          ...(updatedImages.length > 0 ? { images: updatedImages, photoUrl: updatedImages[0] } : {}),
         });
-        setUploading(false);
         loadedItemIdRef.current = null;
         Alert.alert('Succès', 'Votre annonce a été modifiée !', [
           { text: 'OK', onPress: goBack },
@@ -310,27 +318,42 @@ export default function AddItemScreen() {
           prixParJour: parseFloat(formData.prixParJour),
           ville: formData.ville,
           photoUrl: '',
+          images: [],
           ownerId: user.uid,
           proprietaireId: user.uid,
           proprietaire: { nom: nomComplet, initiales },
           actif: true,
           datePublication: new Date(),
           periodeMin: parseInt(formData.periodeMin, 10) || 1,
+          ...(location?.latitude != null ? { latitude: location.latitude, longitude: location.longitude } : {}),
         });
 
         if (formData.photos.length > 0) {
           const downloadURLs = await uploadItemImages(formData.photos, itemId);
-          await updateItem(itemId, { images: downloadURLs });
+          const validUrls = downloadURLs.filter(u => u?.startsWith('https://'));
+          if (validUrls.length === 0) {
+            throw new Error('Aucune image n\'a pu être uploadée correctement');
+          }
+          await updateItem(itemId, { images: validUrls, photoUrl: validUrls[0] });
         }
 
-        setUploading(false);
         Alert.alert('Succès', 'Votre objet a été publié !', [
           { text: 'OK', onPress: goBack },
         ]);
       }
-    } catch {
+    } catch (error: any) {
+      console.error('[AddItem] handleSubmit error:', error?.message ?? error);
+      let errorMsg = 'Une erreur est survenue lors de la publication.';
+      if (error?.message?.includes('timeout')) {
+        errorMsg = 'Upload trop long. Vérifiez votre connexion internet et réessayez avec des images plus légères.';
+      } else if (error?.code === 'storage/unauthorized') {
+        errorMsg = "Vous n'avez pas la permission d'uploader des fichiers.";
+      } else if (error?.message) {
+        errorMsg = error.message;
+      }
+      Alert.alert('Échec de la publication', errorMsg);
+    } finally {
       setUploading(false);
-      Alert.alert('Erreur', 'Une erreur est survenue. Réessayez.');
     }
   }
 
@@ -519,22 +542,53 @@ export default function AddItemScreen() {
               returnKeyType="next"
             />
           </View>
+
+          {/* Location indicator */}
+          {!isEditMode && (
+            locLoading ? (
+              <View style={styles.locationInfo}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.locationInfoText}>Localisation en cours...</Text>
+              </View>
+            ) : permissionDenied ? (
+              <View style={styles.locationWarning}>
+                <Ionicons name="location-outline" size={16} color={Colors.warning} />
+                <Text style={styles.locationWarningText}>
+                  Géolocalisation refusée. L'objet sera publié sans position précise.
+                </Text>
+              </View>
+            ) : location ? (
+              <View style={styles.locationInfo}>
+                <Ionicons name="location" size={16} color={Colors.success} />
+                <Text style={styles.locationInfoText}>
+                  Position détectée : {location.city ?? formData.ville ?? 'position GPS'}
+                </Text>
+              </View>
+            ) : null
+          )}
         </View>
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Période minimum *</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="time-outline" size={20} color={Colors.textTertiary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.inputRowText}
-              placeholder="1"
-              placeholderTextColor={Colors.textTertiary}
-              value={formData.periodeMin}
-              onChangeText={t => setFormData(prev => ({ ...prev, periodeMin: t.replace(/[^0-9]/g, '') || '1' }))}
-              keyboardType="numeric"
-              returnKeyType="done"
-            />
-            <Text style={styles.inputSuffix}>jours min.</Text>
+          <View style={styles.stepperRow}>
+            <TouchableOpacity
+              style={styles.stepperBtn}
+              onPress={() => setFormData(prev => ({ ...prev, periodeMin: String(Math.max(1, parseInt(prev.periodeMin, 10) - 1)) }))}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="remove" size={20} color={Colors.primary} />
+            </TouchableOpacity>
+            <View style={styles.stepperValue}>
+              <Text style={styles.stepperValueText}>{formData.periodeMin}</Text>
+              <Text style={styles.stepperUnit}>jour{parseInt(formData.periodeMin, 10) > 1 ? 's' : ''} min.</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.stepperBtn}
+              onPress={() => setFormData(prev => ({ ...prev, periodeMin: String(parseInt(prev.periodeMin, 10) + 1) }))}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={20} color={Colors.primary} />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -937,6 +991,40 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
+  // ── Stepper +/- ──
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    height: Layout.inputHeight,
+    overflow: 'hidden',
+  },
+  stepperBtn: {
+    width: 48,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValueText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.lg,
+    color: Colors.textPrimary,
+    lineHeight: Typography.size.lg + 2,
+  },
+  stepperUnit: {
+    fontFamily: Typography.fontBody,
+    fontSize: 11,
+    color: Colors.textTertiary,
+  },
+
   // ── Recap (step 3) ──
   recapPhoto: {
     width: '100%',
@@ -1072,5 +1160,37 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontHeading,
     fontSize: Typography.size.md,
     color: Colors.primary,
+  },
+
+  // ── Location indicator ──
+  locationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.successLight,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginVertical: Spacing.sm,
+  },
+  locationInfoText: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.success,
+    flex: 1,
+  },
+  locationWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.warningLight,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginVertical: Spacing.sm,
+  },
+  locationWarningText: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.warning,
+    flex: 1,
   },
 });
