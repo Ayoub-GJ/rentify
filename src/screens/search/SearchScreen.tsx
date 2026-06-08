@@ -187,6 +187,14 @@ export default function SearchScreen() {
     return items.length;
   }, [search, activeCategory, pendingFilters, allItems]);
 
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (activeCategory !== 'tout') count++;
+    if (filters.prixMax < DEFAULT_FILTERS.prixMax) count++;
+    if (filters.noteMin > 0) count++;
+    return count;
+  }, [activeCategory, filters]);
+
   function openModal() {
     setPendingFilters(filters);
     setShowFilters(true);
@@ -199,6 +207,12 @@ export default function SearchScreen() {
 
   function resetFilters() {
     setPendingFilters(DEFAULT_FILTERS);
+  }
+
+  function resetAllFilters() {
+    setFilters(DEFAULT_FILTERS);
+    setActiveCategory('tout');
+    setActiveSort('proximite');
   }
 
   const renderItem = useCallback(
@@ -239,8 +253,26 @@ export default function SearchScreen() {
         </View>
         <TouchableOpacity style={styles.filterBtn} onPress={openModal} activeOpacity={0.85}>
           <Ionicons name="options-outline" size={22} color={Colors.textInverse} />
+          {activeFiltersCount > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
+
+      {/* Active filters bar */}
+      {activeFiltersCount > 0 && (
+        <View style={styles.activeFiltersBar}>
+          <Ionicons name="filter" size={14} color={Colors.primary} />
+          <Text style={styles.activeFiltersText}>
+            {activeFiltersCount} filtre{activeFiltersCount > 1 ? 's' : ''} actif{activeFiltersCount > 1 ? 's' : ''}
+          </Text>
+          <TouchableOpacity onPress={resetAllFilters} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }} activeOpacity={0.7}>
+            <Text style={styles.activeFiltersClear}>Tout effacer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Category chips — marginBottom colle directement la stats row */}
       <ScrollView
@@ -496,6 +528,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.button,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: Colors.textInverse,
+    borderRadius: Radius.full,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
+  filterBadgeText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 10,
+    color: Colors.primary,
+    lineHeight: 13,
+  },
+  activeFiltersBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Layout.screenPadding,
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.primaryXLight,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  activeFiltersText: {
+    flex: 1,
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.sm,
+    color: Colors.primary,
+  },
+  activeFiltersClear: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.sm,
+    color: Colors.primary,
+    textDecorationLine: 'underline',
   },
 
   // Category chips
