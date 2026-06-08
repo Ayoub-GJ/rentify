@@ -19,7 +19,8 @@ export default function SmartImage({ uri, style, resizeMode = 'cover' }: Props) 
     <View style={[{ backgroundColor: Colors.surfaceAlt, overflow: 'hidden' }, style]}>
       {!!uri && (
         <Image
-          source={{ uri }}
+          key={uri}
+          source={{ uri, cache: 'reload' }}
           style={StyleSheet.absoluteFill}
           resizeMode={resizeMode}
           onLoad={() => setIsLoading(false)}

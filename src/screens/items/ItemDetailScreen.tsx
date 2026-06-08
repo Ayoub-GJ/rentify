@@ -16,6 +16,7 @@ import {
   getMyRentalForItem,
   getItemRatingStats,
   getReviewsByItem,
+  getItemById,
 } from '../../services/firestoreService';
 import { useFavorite } from '../../hooks/useFavorite';
 import StarRating from '../../components/StarRating';
@@ -69,8 +70,11 @@ const FALLBACK_DESCRIPTION =
 export default function ItemDetailScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
-  const { item } = route.params;
+  const { item: initialItem } = route.params;
   const insets = useSafeAreaInsets();
+
+  // État local : initialisé depuis les params, rafraîchi depuis Firestore au focus
+  const [item, setItem] = useState(initialItem);
 
   const { isFav, toggle: toggleFav } = useFavorite(item.id);
   const [expanded, setExpanded] = useState(false);
@@ -103,6 +107,30 @@ export default function ItemDetailScreen() {
         setReviews([]);
       });
   }, [item?.id]);
+
+  // Rafraîchir les données de l'objet depuis Firestore à chaque focus
+  // (capture les modifications de titre, prix, images faites via AddItemScreen)
+  useFocusEffect(
+    useCallback(() => {
+      getItemById(item.id)
+        .then((fresh) => {
+          if (!fresh) return;
+          setItem((prev) => ({
+            ...prev,
+            titre: fresh.titre,
+            description: fresh.description ?? prev.description,
+            prixParJour: fresh.prixParJour,
+            ville: fresh.ville,
+            images: fresh.images ?? prev.images,
+            photoUrl: fresh.photoUrl,
+            disponible: fresh.actif,
+            periodeMin: fresh.periodeMin ?? prev.periodeMin,
+            proprietaire: fresh.proprietaire ?? prev.proprietaire,
+          }));
+        })
+        .catch((err) => console.warn('[ItemDetail] refresh item error:', err));
+    }, [item.id]),
+  );
 
   // Détecter le contexte à chaque focus (mise à jour après réservation, etc.)
   useFocusEffect(
