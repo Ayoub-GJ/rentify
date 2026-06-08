@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { auth } from '../../config/firebase.config';
-import { getReviewsByLocataire } from '../../services/firestoreService';
+import { getReviewsByProprietaire } from '../../services/firestoreService';
 import StarRating from '../../components/StarRating';
 import { Review } from '../../types';
 import { formatDateShort, avatarColorFromUid } from '../../utils/formatters';
@@ -28,6 +28,7 @@ function ReviewCard({ review }: { review: Review }) {
           <Text style={styles.avatarText}>{initial}</Text>
         </View>
         <View style={styles.cardHeaderInfo}>
+          <Text style={styles.reviewerName}>{review.locataireName}</Text>
           <Text style={styles.itemTitre} numberOfLines={1}>{review.itemTitre}</Text>
           <Text style={styles.cardDate}>{formatDateShort(review.createdAt)}</Text>
         </View>
@@ -51,10 +52,16 @@ export default function MesAvisScreen() {
       const uid = auth.currentUser?.uid;
       if (!uid) { setLoading(false); return; }
       setLoading(true);
-      getReviewsByLocataire(uid).then((r) => {
-        setReviews(r);
-        setLoading(false);
-      });
+      getReviewsByProprietaire(uid)
+        .then((r) => {
+          console.log('[MesAvisScreen] Reviews fetched:', r.length);
+          setReviews(r);
+        })
+        .catch((err) => {
+          console.error('[MesAvisScreen] Error fetching reviews:', err);
+          setReviews([]);
+        })
+        .finally(() => setLoading(false));
     }, []),
   );
 
@@ -90,7 +97,7 @@ export default function MesAvisScreen() {
           <View style={styles.summary}>
             <Text style={styles.summaryAverage}>{average.toFixed(1)}</Text>
             <StarRating value={average} size={22} />
-            <Text style={styles.summaryCount}>{count} avis publié{count > 1 ? 's' : ''}</Text>
+            <Text style={styles.summaryCount}>{count} avis reçu{count > 1 ? 's' : ''}</Text>
           </View>
 
           <FlatList
@@ -191,10 +198,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  itemTitre: {
+  reviewerName: {
     fontFamily: Typography.fontHeading,
     fontSize: Typography.size.md,
     color: Colors.textPrimary,
+  },
+  itemTitre: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
   },
   cardDate: {
     fontFamily: Typography.fontBody,

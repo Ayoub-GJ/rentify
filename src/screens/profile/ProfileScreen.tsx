@@ -310,10 +310,22 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.statSep} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>
-              {(stats?.reviewsCount ?? 0) > 0 ? `★ ${stats!.averageRating.toFixed(1)}` : '—'}
-            </Text>
-            <Text style={styles.statLabel}>Note</Text>
+            {(stats?.reviewsCount ?? 0) > 0 ? (
+              <>
+                <View style={styles.statRatingRow}>
+                  <Ionicons name="star" size={14} color={Colors.warning} />
+                  <Text style={[styles.statValue, styles.statValueRating]}>
+                    {stats!.averageRating.toFixed(1)}
+                  </Text>
+                </View>
+                <Text style={styles.statLabel}>{stats!.reviewsCount} avis</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.statValue}>—</Text>
+                <Text style={styles.statLabel}>Note</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -680,6 +692,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textTertiary,
     textAlign: 'center',
+  },
+  statRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  statValueRating: {
+    color: Colors.warning,
   },
 
   // ── Info rows ──

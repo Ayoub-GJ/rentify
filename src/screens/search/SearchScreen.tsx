@@ -17,7 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Slider from '@react-native-community/slider';
-import { getAllItems } from '../../services/firestoreService';
+import { getAllItemsWithRatings } from '../../services/firestoreService';
+import StarRating from '../../components/StarRating';
 import { Item } from '../../types';
 import { MockItem } from '../../data/mockItems';
 import { SearchStackParamList } from '../../navigation/types';
@@ -63,6 +64,7 @@ interface Filters {
 }
 
 const NOTE_CHIPS: { label: string; value: number }[] = [
+  { label: 'Toutes', value: 0 },
   { label: '★ 3+', value: 3 },
   { label: '★ 4+', value: 4 },
   { label: '★ 4.5+', value: 4.5 },
@@ -75,7 +77,7 @@ const SORT_OPTIONS: { id: SortOption; label: string }[] = [
   { id: 'note', label: 'Note' },
 ];
 
-const DEFAULT_FILTERS: Filters = { prixMax: 200, distanceMax: 3, noteMin: 4 };
+const DEFAULT_FILTERS: Filters = { prixMax: 200, distanceMax: 3, noteMin: 0 };
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
 const CATEGORY_CHIPS = [ALL_CHIP, ...Categories] as const;
@@ -96,6 +98,11 @@ function ItemRow({ item, onPress }: { item: Item; onPress: () => void }) {
           <Text style={styles.itemPrice}>{item.prixParJour} MAD</Text>
           <Text style={styles.itemPriceUnit}>/j</Text>
         </View>
+        {(item.averageRating ?? 0) > 0 && (
+          <View style={styles.itemRatingRow}>
+            <StarRating value={item.averageRating!} size={12} showCount count={item.reviewsCount} />
+          </View>
+        )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
     </TouchableOpacity>
@@ -124,7 +131,8 @@ export default function SearchScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      getAllItems().then((result) => {
+      getAllItemsWithRatings().then((result) => {
+        console.log('[SearchScreen] Total items loaded:', result.length);
         setAllItems(result);
         setIsInitialLoad(false);
       });
@@ -150,10 +158,16 @@ export default function SearchScreen() {
       items = items.filter((i) => i.categorie.toLowerCase() === activeCategory);
     }
     items = items.filter((i) => i.prixParJour <= filters.prixMax);
+    if (filters.noteMin > 0) {
+      items = items.filter((i) => (i.averageRating ?? 0) >= filters.noteMin);
+    }
     if (activeSort === 'prix') items.sort((a, b) => a.prixParJour - b.prixParJour);
-    if (activeSort === 'note' || activeSort === 'proximite') {
+    else if (activeSort === 'note') {
+      items.sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0));
+    } else {
       items.sort((a, b) => b.datePublication.getTime() - a.datePublication.getTime());
     }
+    console.log('[SearchScreen] noteMin filter:', filters.noteMin, '— After filters:', items.length);
     return items;
   }, [search, activeCategory, activeSort, filters, allItems]);
 
@@ -166,7 +180,11 @@ export default function SearchScreen() {
     if (activeCategory !== 'tout') {
       items = items.filter((i) => i.categorie.toLowerCase() === activeCategory);
     }
-    return items.filter((i) => i.prixParJour <= pendingFilters.prixMax).length;
+    items = items.filter((i) => i.prixParJour <= pendingFilters.prixMax);
+    if (pendingFilters.noteMin > 0) {
+      items = items.filter((i) => (i.averageRating ?? 0) >= pendingFilters.noteMin);
+    }
+    return items.length;
   }, [search, activeCategory, pendingFilters, allItems]);
 
   function openModal() {
@@ -400,8 +418,16 @@ export default function SearchScreen() {
               <TouchableOpacity style={styles.resetBtn} onPress={resetFilters} activeOpacity={0.8}>
                 <Text style={styles.resetBtnText}>Réinitialiser</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.applyBtn} onPress={applyFilters} activeOpacity={0.85}>
-                <Text style={styles.applyBtnText}>Voir {pendingCount} résultats</Text>
+              <TouchableOpacity
+                style={[styles.applyBtn, pendingCount === 0 && { opacity: 0.6 }]}
+                onPress={applyFilters}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.applyBtnText}>
+                  {pendingCount === 0
+                    ? 'Aucun résultat'
+                    : `Voir ${pendingCount} résultat${pendingCount > 1 ? 's' : ''}`}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -610,6 +636,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBody,
     fontSize: 11,
     color: Colors.textTertiary,
+  },
+  itemRatingRow: {
+    marginTop: 3,
   },
 
   // Empty state

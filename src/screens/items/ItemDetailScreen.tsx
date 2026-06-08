@@ -14,9 +14,13 @@ import {
   getOrCreateConversation,
   countPendingRentalsForItem,
   getMyRentalForItem,
+  getItemRatingStats,
+  getReviewsByItem,
 } from '../../services/firestoreService';
 import { useFavorite } from '../../hooks/useFavorite';
-import { fullName, getInitials } from '../../utils/formatters';
+import StarRating from '../../components/StarRating';
+import { fullName, getInitials, avatarColorFromUid, formatDateShort } from '../../utils/formatters';
+import { Review, StatutDemande } from '../../types';
 import { auth } from '../../config/firebase.config';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +35,6 @@ import {
   Layout,
   Categories,
 } from '../../theme/theme';
-import { StatutDemande } from '../../types';
 import {
   HomeStackParamList,
   SearchStackParamList,
@@ -74,6 +77,8 @@ export default function ItemDetailScreen() {
   const [proprietaire, setProprietaire] = useState(item.proprietaire);
   const [loadingContact, setLoadingContact] = useState(false);
   const [context, setContext] = useState<ItemContext | null>(null);
+  const [itemRating, setItemRating] = useState({ average: 0, count: 0 });
+  const [reviews, setReviews] = useState<Review[]>([]);
 
   // Charger le nom du proprio une seule fois (si placeholder)
   useEffect(() => {
@@ -83,6 +88,21 @@ export default function ItemDetailScreen() {
       });
     }
   }, [item.proprietaireId]);
+
+  // Charger les stats et avis de l'objet
+  useEffect(() => {
+    if (!item?.id) return;
+    Promise.all([getItemRatingStats(item.id), getReviewsByItem(item.id)])
+      .then(([stats, reviewsData]) => {
+        setItemRating(stats);
+        setReviews(reviewsData);
+      })
+      .catch((err) => {
+        console.error('[ItemDetail] Reviews fetch error:', err);
+        setItemRating({ average: 0, count: 0 });
+        setReviews([]);
+      });
+  }, [item?.id]);
 
   // Détecter le contexte à chaque focus (mise à jour après réservation, etc.)
   useFocusEffect(
@@ -414,10 +434,18 @@ export default function ItemDetailScreen() {
               <Text style={styles.priceUnit}>/jour</Text>
             </View>
             <View style={styles.statsRow}>
-              <Ionicons name="star" size={14} color="#F0A020" />
-              <Text style={styles.statsNote}>{item.note}</Text>
-              <Text style={styles.statsAvis}>({item.avis} avis)</Text>
-              <Text style={styles.statsDot}>·</Text>
+              {itemRating.count > 0 ? (
+                <>
+                  <StarRating value={itemRating.average} size={14} showCount count={itemRating.count} />
+                  <Text style={styles.statsDot}>·</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="star-outline" size={14} color={Colors.textTertiary} />
+                  <Text style={styles.statsAvis}>Aucun avis</Text>
+                  <Text style={styles.statsDot}>·</Text>
+                </>
+              )}
               <Ionicons name="location" size={14} color={Colors.primary} />
               <Text style={styles.statsVille}>{item.ville}</Text>
             </View>
@@ -511,6 +539,63 @@ export default function ItemDetailScreen() {
                 </View>
               )}
             </View>
+          </View>
+
+          {/* F. Avis */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Avis{itemRating.count > 0 ? ` (${itemRating.count})` : ''}
+            </Text>
+
+            {itemRating.count === 0 ? (
+              <View style={styles.reviewsEmpty}>
+                <Ionicons name="star-outline" size={32} color={Colors.textTertiary} />
+                <Text style={styles.reviewsEmptyTitle}>Aucun avis pour le moment</Text>
+                <Text style={styles.reviewsEmptySubtitle}>Soyez le premier à louer cet objet</Text>
+              </View>
+            ) : (
+              <>
+                {/* Summary */}
+                <View style={styles.reviewsSummary}>
+                  <Text style={styles.reviewsAverage}>{itemRating.average.toFixed(1)}</Text>
+                  <StarRating value={itemRating.average} size={20} />
+                  <Text style={styles.reviewsBasedOn}>Basé sur {itemRating.count} avis</Text>
+                </View>
+
+                {/* List — max 3 */}
+                {reviews.slice(0, 3).map((review) => {
+                  const initial = (review.locataireName ?? '?')[0].toUpperCase();
+                  const avatarColor = avatarColorFromUid(review.locataireId);
+                  return (
+                    <View key={review.id} style={styles.reviewCard}>
+                      <View style={styles.reviewHeader}>
+                        <View style={[styles.reviewAvatar, { backgroundColor: avatarColor }]}>
+                          <Text style={styles.reviewAvatarText}>{initial}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.reviewerName}>{review.locataireName}</Text>
+                          <Text style={styles.reviewDate}>{formatDateShort(review.createdAt)}</Text>
+                        </View>
+                        <StarRating value={review.rating} size={14} />
+                      </View>
+                      {!!review.commentaire && (
+                        <Text style={styles.reviewComment}>"{review.commentaire}"</Text>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* Voir tous */}
+                {itemRating.count > 3 && (
+                  <TouchableOpacity style={styles.seeAllBtn} activeOpacity={0.7}>
+                    <Text style={styles.seeAllText}>
+                      Voir tous les avis ({itemRating.count})
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
 
         </View>
@@ -743,6 +828,99 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBodyMedium,
     fontSize: Typography.size.sm,
     color: Colors.textSecondary,
+  },
+
+  // ── F. Avis ──
+  reviewsEmpty: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xl,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+  },
+  reviewsEmptyTitle: {
+    fontFamily: Typography.fontHeading,
+    fontSize: Typography.size.md,
+    color: Colors.textSecondary,
+  },
+  reviewsEmptySubtitle: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textTertiary,
+  },
+  reviewsSummary: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    ...Shadows.sm,
+  },
+  reviewsAverage: {
+    fontFamily: Typography.fontDisplay,
+    fontSize: 40,
+    color: Colors.textPrimary,
+    lineHeight: 48,
+  },
+  reviewsBasedOn: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  reviewCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    ...Shadows.sm,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  reviewAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewAvatarText: {
+    fontFamily: Typography.fontHeading,
+    fontSize: 14,
+    color: Colors.textInverse,
+  },
+  reviewerName: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.md,
+    color: Colors.textPrimary,
+  },
+  reviewDate: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+  reviewComment: {
+    fontFamily: Typography.fontBody,
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+  },
+  seeAllText: {
+    fontFamily: Typography.fontBodyMedium,
+    fontSize: Typography.size.sm,
+    color: Colors.primary,
   },
 
   // ── Footer adaptatif ──

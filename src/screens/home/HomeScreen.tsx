@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
-import { getAllItems, getItemsByCategory, getUserBadges, UserBadges } from '../../services/firestoreService';
+import { getAllItemsWithRatings, getItemsByCategoryWithRatings, getUserBadges, UserBadges } from '../../services/firestoreService';
 import { useFavorite } from '../../hooks/useFavorite';
 import { auth } from '../../config/firebase.config';
 import { Item } from '../../types';
@@ -130,8 +130,8 @@ export default function HomeScreen() {
 
   const loadItems = useCallback(async () => {
     const result = activeCategory === 'tout'
-      ? await getAllItems()
-      : await getItemsByCategory(activeCategory);
+      ? await getAllItemsWithRatings()
+      : await getItemsByCategoryWithRatings(activeCategory);
     setItems(result);
     setIsInitialLoad(false);
   }, [activeCategory]);

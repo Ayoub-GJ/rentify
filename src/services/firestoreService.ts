@@ -1090,26 +1090,7 @@ export const createReview = async (params: {
     createdAt: serverTimestamp(),
   });
 
-  // Update item's cached rating stats
-  try {
-    const itemReviews = await getDocs(query(
-      collection(db, 'reviews'),
-      where('itemId', '==', params.itemId),
-    ));
-    const count = itemReviews.size;
-    const avg = count > 0
-      ? Math.round(
-          itemReviews.docs.reduce((sum, d) => sum + (d.data().rating as number), 0) / count * 10,
-        ) / 10
-      : 0;
-    await updateDoc(doc(db, 'items', params.itemId), {
-      averageRating: avg,
-      reviewsCount: count,
-    });
-  } catch {
-    // Non-blocking: item rating update failure should not fail the review creation
-  }
-
+  console.log('[createReview] Review created with ID:', docRef.id);
   return docRef.id;
 };
 
@@ -1127,16 +1108,15 @@ export const getReviewsByProprietaire = async (proprietaireId: string): Promise<
   const snap = await getDocs(query(
     collection(db, 'reviews'),
     where('proprietaireId', '==', proprietaireId),
-    orderBy('createdAt', 'desc'),
   ));
-  return snap.docs.map(mapDocToReview);
+  const reviews = snap.docs.map(mapDocToReview);
+  return reviews.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
 export const getReviewsByItem = async (itemId: string): Promise<Review[]> => {
   const snap = await getDocs(query(
     collection(db, 'reviews'),
     where('itemId', '==', itemId),
-    orderBy('createdAt', 'desc'),
   ));
   return snap.docs.map(mapDocToReview);
 };
@@ -1148,6 +1128,7 @@ export const getProprietaireRatingStats = async (
   const count = reviews.length;
   if (count === 0) return { average: 0, count: 0 };
   const average = Math.round(reviews.reduce((s, r) => s + r.rating, 0) / count * 10) / 10;
+  console.log(`[getProprietaireRatingStats] uid=${proprietaireId} average=${average} count=${count}`);
   return { average, count };
 };
 
@@ -1155,9 +1136,9 @@ export const getReviewsByLocataire = async (locataireId: string): Promise<Review
   const snap = await getDocs(query(
     collection(db, 'reviews'),
     where('locataireId', '==', locataireId),
-    orderBy('createdAt', 'desc'),
   ));
-  return snap.docs.map(mapDocToReview);
+  const reviews = snap.docs.map(mapDocToReview);
+  return reviews.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
 export const getItemRatingStats = async (
@@ -1167,5 +1148,45 @@ export const getItemRatingStats = async (
   const count = reviews.length;
   if (count === 0) return { average: 0, count: 0 };
   const average = Math.round(reviews.reduce((s, r) => s + r.rating, 0) / count * 10) / 10;
+  console.log(`[getItemRatingStats] item=${itemId} average=${average} count=${count}`);
   return { average, count };
+};
+
+export const getAllItemsWithRatings = async (): Promise<Item[]> => {
+  const items = await getAllItems();
+  const enriched = await Promise.all(
+    items.map(async (item) => {
+      try {
+        const stats = await getItemRatingStats(item.id);
+        return {
+          ...item,
+          averageRating: stats.count > 0 ? stats.average : undefined,
+          reviewsCount: stats.count > 0 ? stats.count : undefined,
+        };
+      } catch {
+        return item;
+      }
+    }),
+  );
+  console.log('[getAllItemsWithRatings] Items loaded with ratings:', enriched.length);
+  return enriched;
+};
+
+export const getItemsByCategoryWithRatings = async (categorie: string | Categorie): Promise<Item[]> => {
+  const items = await getItemsByCategory(categorie);
+  const enriched = await Promise.all(
+    items.map(async (item) => {
+      try {
+        const stats = await getItemRatingStats(item.id);
+        return {
+          ...item,
+          averageRating: stats.count > 0 ? stats.average : undefined,
+          reviewsCount: stats.count > 0 ? stats.count : undefined,
+        };
+      } catch {
+        return item;
+      }
+    }),
+  );
+  return enriched;
 };
