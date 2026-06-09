@@ -24,6 +24,7 @@ export type HomeStackParamList = {
 
 export type SearchStackParamList = {
   SearchScreen: { openFilters?: boolean };
+  MapScreen: undefined;
   ItemDetail: { item: MockItem };
   Reservation: { item: MockItem };
   Chat: ChatScreenParams;

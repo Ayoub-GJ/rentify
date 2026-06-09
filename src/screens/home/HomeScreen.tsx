@@ -16,11 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { getCurrentUser } from '../../services/authService';
-import { getAllItemsWithRatings, getItemsByCategoryWithRatings, getUserBadges, UserBadges } from '../../services/firestoreService';
+import { getAllItemsWithRatings, getItemsByCategoryWithRatings, getUserBadges, getUserById, UserBadges } from '../../services/firestoreService';
 import { useFavorite } from '../../hooks/useFavorite';
+import { useLocation } from '../../hooks/useLocation';
 import { auth } from '../../config/firebase.config';
 import { Item } from '../../types';
-import { MockItem } from '../../data/mockItems';
+import { toMockItem } from '../../utils/itemHelpers';
 import {
   Colors,
   Typography,
@@ -31,25 +32,6 @@ import {
   Categories,
 } from '../../theme/theme';
 import { HomeStackParamList } from '../../navigation/types';
-
-function toMockItem(item: Item): MockItem {
-  return {
-    id: item.id,
-    titre: item.titre,
-    categorie: item.categorie.toLowerCase(),
-    ville: item.ville,
-    prixParJour: item.prixParJour,
-    disponible: item.actif,
-    distance: 0,
-    images: (item.images && item.images.length > 0) ? item.images : (item.photoUrl ? [item.photoUrl] : []),
-    note: 0,
-    avis: 0,
-    proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
-    proprietaireId: item.proprietaireId ?? item.ownerId,
-    description: item.description,
-    periodeMin: item.periodeMin,
-  };
-}
 
 type HomeNavProp = StackNavigationProp<HomeStackParamList, 'HomeScreen'>;
 
@@ -124,9 +106,13 @@ export default function HomeScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [badges, setBadges] = useState<UserBadges>({ pendingRequestsCount: 0, unreadMessagesCount: 0 });
+  const [userVille, setUserVille] = useState('');
 
+  const { location } = useLocation();
   const firebaseUser = getCurrentUser();
   const prenom = firebaseUser?.displayName?.split(' ')[0] ?? 'toi';
+
+  const displayVille = userVille || location?.city || 'Agadir';
 
   const loadItems = useCallback(async () => {
     const result = activeCategory === 'tout'
@@ -140,7 +126,12 @@ export default function HomeScreen() {
     useCallback(() => {
       loadItems();
       const uid = auth.currentUser?.uid;
-      if (uid) getUserBadges(uid).then(setBadges);
+      if (uid) {
+        getUserBadges(uid).then(setBadges);
+        getUserById(uid).then((profile) => {
+          if (profile?.ville) setUserVille(profile.ville);
+        });
+      }
     }, [loadItems])
   );
 
@@ -149,6 +140,16 @@ export default function HomeScreen() {
     const totalGap = Layout.cardGap;
     return (screenWidth - totalPadding - totalGap) / 2;
   }, [screenWidth]);
+
+  // Items filtrés par ville du user ; si aucun résultat → tous les items
+  const nearbyItems = useMemo(() => {
+    if (!userVille) return [];
+    const q = userVille.toLowerCase().trim();
+    return items.filter((i) => i.ville.toLowerCase().trim() === q);
+  }, [items, userVille]);
+
+  const displayedItems = nearbyItems.length > 0 ? nearbyItems : items;
+  const sectionLabel = nearbyItems.length > 0 ? 'Près de vous' : 'Objets disponibles';
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => (
@@ -169,7 +170,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>Bonjour, {prenom} !</Text>
           <View style={styles.locationRow}>
             <Ionicons name="location" size={14} color={Colors.primary} />
-            <Text style={styles.locationText}>Agadir, Maroc</Text>
+            <Text style={styles.locationText}>{displayVille}, Maroc</Text>
           </View>
         </View>
         <View style={styles.headerActions}>
@@ -254,8 +255,11 @@ export default function HomeScreen() {
 
       {/* ── Titre section items ── */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Près de vous</Text>
-        <TouchableOpacity activeOpacity={0.7}>
+        <Text style={styles.sectionTitle}>{sectionLabel}</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => (navigation as any).navigate('Recherche')}
+        >
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
@@ -276,7 +280,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.root}>
       <FlatList
-        data={items}
+        data={displayedItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         numColumns={2}

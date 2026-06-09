@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Modal,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
@@ -20,27 +19,9 @@ import Slider from '@react-native-community/slider';
 import { getAllItemsWithRatings } from '../../services/firestoreService';
 import StarRating from '../../components/StarRating';
 import { Item } from '../../types';
-import { MockItem } from '../../data/mockItems';
 import { SearchStackParamList } from '../../navigation/types';
-
-function toMockItem(item: Item): MockItem {
-  return {
-    id: item.id,
-    titre: item.titre,
-    categorie: item.categorie.toLowerCase(),
-    ville: item.ville,
-    prixParJour: item.prixParJour,
-    disponible: item.actif,
-    distance: 0,
-    images: (item.images && item.images.length > 0) ? item.images : (item.photoUrl ? [item.photoUrl] : []),
-    note: 0,
-    avis: 0,
-    proprietaire: item.proprietaire ?? { nom: 'Propriétaire', initiales: '?' },
-    proprietaireId: item.proprietaireId ?? item.ownerId,
-    description: item.description,
-    periodeMin: item.periodeMin,
-  };
-}
+import { toMockItem } from '../../utils/itemHelpers';
+import { CITY_NAMES } from '../../utils/cityCoordinates';
 import {
   Colors,
   Typography,
@@ -59,7 +40,6 @@ type SortOption = 'proximite' | 'prix' | 'note';
 
 interface Filters {
   prixMax: number;
-  distanceMax: number;
   noteMin: number;
 }
 
@@ -77,7 +57,7 @@ const SORT_OPTIONS: { id: SortOption; label: string }[] = [
   { id: 'note', label: 'Note' },
 ];
 
-const DEFAULT_FILTERS: Filters = { prixMax: 200, distanceMax: 3, noteMin: 0 };
+const DEFAULT_FILTERS: Filters = { prixMax: 200, noteMin: 0 };
 
 const ALL_CHIP = { id: 'tout', label: 'Tout', icon: 'apps-outline', color: Colors.primary } as const;
 const CATEGORY_CHIPS = [ALL_CHIP, ...Categories] as const;
@@ -128,6 +108,8 @@ export default function SearchScreen() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [pendingFilters, setPendingFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [villeFilter, setVilleFilter] = useState('');
+  const [pendingVilleFilter, setPendingVilleFilter] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -161,6 +143,9 @@ export default function SearchScreen() {
     if (filters.noteMin > 0) {
       items = items.filter((i) => (i.averageRating ?? 0) >= filters.noteMin);
     }
+    if (villeFilter) {
+      items = items.filter((i) => i.ville === villeFilter);
+    }
     if (activeSort === 'prix') items.sort((a, b) => a.prixParJour - b.prixParJour);
     else if (activeSort === 'note') {
       items.sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0));
@@ -169,7 +154,7 @@ export default function SearchScreen() {
     }
     console.log('[SearchScreen] noteMin filter:', filters.noteMin, '— After filters:', items.length);
     return items;
-  }, [search, activeCategory, activeSort, filters, allItems]);
+  }, [search, activeCategory, activeSort, filters, villeFilter, allItems]);
 
   const pendingCount = useMemo(() => {
     let items = [...allItems];
@@ -184,33 +169,41 @@ export default function SearchScreen() {
     if (pendingFilters.noteMin > 0) {
       items = items.filter((i) => (i.averageRating ?? 0) >= pendingFilters.noteMin);
     }
+    if (pendingVilleFilter) {
+      items = items.filter((i) => i.ville === pendingVilleFilter);
+    }
     return items.length;
-  }, [search, activeCategory, pendingFilters, allItems]);
+  }, [search, activeCategory, pendingFilters, pendingVilleFilter, allItems]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (activeCategory !== 'tout') count++;
     if (filters.prixMax < DEFAULT_FILTERS.prixMax) count++;
     if (filters.noteMin > 0) count++;
+    if (villeFilter) count++;
     return count;
-  }, [activeCategory, filters]);
+  }, [activeCategory, filters, villeFilter]);
 
   function openModal() {
     setPendingFilters(filters);
+    setPendingVilleFilter(villeFilter);
     setShowFilters(true);
   }
 
   function applyFilters() {
     setFilters(pendingFilters);
+    setVilleFilter(pendingVilleFilter);
     setShowFilters(false);
   }
 
   function resetFilters() {
     setPendingFilters(DEFAULT_FILTERS);
+    setPendingVilleFilter('');
   }
 
   function resetAllFilters() {
     setFilters(DEFAULT_FILTERS);
+    setVilleFilter('');
     setActiveCategory('tout');
     setActiveSort('proximite');
   }
@@ -345,6 +338,7 @@ export default function SearchScreen() {
                 style={styles.emptyResetBtn}
                 onPress={() => {
                   setFilters(DEFAULT_FILTERS);
+                  setVilleFilter('');
                   setActiveCategory('tout');
                   setSearch('');
                 }}
@@ -361,9 +355,7 @@ export default function SearchScreen() {
       <TouchableOpacity
         style={styles.mapBtn}
         activeOpacity={0.85}
-        onPress={() =>
-          Alert.alert('Bientôt disponible', 'La vue carte sera disponible prochainement.', [{ text: 'OK' }])
-        }
+        onPress={() => navigation.navigate('MapScreen')}
       >
         <Ionicons name="map-outline" size={20} color={Colors.textInverse} />
         <Text style={styles.mapBtnText}>Carte</Text>
@@ -404,25 +396,6 @@ export default function SearchScreen() {
               />
             </View>
 
-            {/* Distance max */}
-            <View style={styles.filterSection}>
-              <View style={styles.filterLabelRow}>
-                <Text style={styles.filterLabel}>Distance max</Text>
-                <Text style={styles.filterValue}>{pendingFilters.distanceMax} km</Text>
-              </View>
-              <Slider
-                style={styles.slider}
-                minimumValue={1}
-                maximumValue={20}
-                step={1}
-                value={pendingFilters.distanceMax}
-                onValueChange={(v) => setPendingFilters((prev) => ({ ...prev, distanceMax: v }))}
-                minimumTrackTintColor={Colors.primary}
-                maximumTrackTintColor={Colors.border}
-                thumbTintColor={Colors.primary}
-              />
-            </View>
-
             {/* Note minimale */}
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Note minimale</Text>
@@ -443,6 +416,44 @@ export default function SearchScreen() {
                   );
                 })}
               </View>
+            </View>
+
+            {/* Ville */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Ville</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.villeChipsScroll}
+                contentContainerStyle={styles.villeChipsList}
+              >
+                {/* "Toutes" chip */}
+                <TouchableOpacity
+                  style={[styles.chip, pendingVilleFilter === '' ? styles.chipActive : styles.chipInactive]}
+                  onPress={() => setPendingVilleFilter('')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.chipLabel, pendingVilleFilter === '' ? styles.chipLabelActive : styles.chipLabelInactive]}>
+                    Toutes
+                  </Text>
+                </TouchableOpacity>
+
+                {CITY_NAMES.map((ville) => {
+                  const active = pendingVilleFilter === ville;
+                  return (
+                    <TouchableOpacity
+                      key={ville}
+                      style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+                      onPress={() => setPendingVilleFilter(active ? '' : ville)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.chipLabel, active ? styles.chipLabelActive : styles.chipLabelInactive]}>
+                        {ville}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Buttons */}
@@ -861,6 +872,17 @@ const styles = StyleSheet.create({
   },
   noteChipLabelActive: {
     color: Colors.textInverse,
+  },
+
+  // Ville chips (modal)
+  villeChipsScroll: {
+    marginTop: Spacing.sm,
+    flexGrow: 0,
+  },
+  villeChipsList: {
+    gap: Spacing.sm,
+    flexDirection: 'row',
+    paddingVertical: 2,
   },
 
   // Sheet buttons
