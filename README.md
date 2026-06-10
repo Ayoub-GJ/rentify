@@ -28,4 +28,4 @@ npx expo start
 ```
 
 ## Auteur
-Ayoub Gouijane — PFE EFET 2025/2026
+Ayoub Gouijane — PFE 2025/2026
