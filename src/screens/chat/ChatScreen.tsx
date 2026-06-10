@@ -15,6 +15,7 @@ import {
   ImageStyle,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
+import UserAvatar from '../../components/UserAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -163,7 +164,7 @@ function MessageBubble({
 export default function ChatScreen() {
   const navigation = useNavigation();
   const route = useRoute<ChatRoute>();
-  const { conversationId, itemTitre, itemImage, otherUserName, itemId } = route.params;
+  const { conversationId, itemTitre, itemImage, otherUserName, otherUserId, itemId } = route.params;
   const insets = useSafeAreaInsets();
 
   const currentUid = auth.currentUser?.uid ?? '';
@@ -246,8 +247,6 @@ export default function ChatScreen() {
     listItems.push({ type: 'message', msg, key: raw.id });
   }
 
-  const initials = getInitials(otherUserName);
-
   return (
     <>
       <KeyboardAvoidingView
@@ -262,9 +261,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            </View>
+            <UserAvatar uid={otherUserId} size={36} name={otherUserName} />
             <View>
               <Text style={styles.headerName}>{otherUserName}</Text>
               <Text style={styles.headerSub} numberOfLines={1}>{itemTitre}</Text>

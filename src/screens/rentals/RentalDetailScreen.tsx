@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
 import SmartImage from '../../components/SmartImage';
+import UserAvatar from '../../components/UserAvatar';
 import RentalProgressStepper from '../../components/RentalProgressStepper';
 import ReviewModal from '../../components/ReviewModal';
 import StarRating from '../../components/StarRating';
@@ -234,6 +235,7 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
         itemTitre: rental.itemTitre,
         itemImage: rental.itemImage,
         otherUserName: fullName(otherUser),
+        otherUserId: otherId,
       });
     } catch {
       Alert.alert('Erreur', "Impossible d'ouvrir la conversation.");
@@ -263,10 +265,7 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
   const isLocataire = role === 'locataire';
   const headerTitle = isLocataire ? 'Ma location' : 'Demande reçue';
   const otherUserLabel = isLocataire ? 'Propriétaire' : 'Locataire';
-  const initiales = getInitials(otherUser);
-  const avatarColor = avatarColorFromUid(
-    isLocataire ? rental.proprietaireId : rental.locataireId,
-  );
+  const otherUid = isLocataire ? rental.proprietaireId : rental.locataireId;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -321,9 +320,7 @@ export default function RentalDetailScreen({ navigation, route }: Props) {
         <SectionCard>
           <SectionTitle label={otherUserLabel} />
           <View style={styles.personRow}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-              <Text style={styles.avatarText}>{initiales}</Text>
-            </View>
+            <UserAvatar uid={otherUid} size={44} name={fullName(otherUser)} photoURL={otherUser?.photoURL} />
             <Text style={styles.personName}>{fullName(otherUser)}</Text>
           </View>
           <TouchableOpacity

@@ -68,8 +68,16 @@ export default function MapScreen() {
         const coords = getCityCoords(ville);
         if (coords) {
           groups.push({ ville, latitude: coords.lat, longitude: coords.lng, items: cityItems });
+        } else {
+          const fallback = cityItems.find(i => i.latitude != null && i.longitude != null);
+          if (fallback) {
+            groups.push({ ville, latitude: fallback.latitude!, longitude: fallback.longitude!, items: cityItems });
+          } else {
+            console.warn(`[MapScreen] No coords for ville: "${ville}" — skipped`);
+          }
         }
       });
+      console.log(`[MapScreen] cityGroups: ${groups.length}`, groups.map(g => g.ville));
       setCityGroups(groups);
       setLoading(false);
     });
@@ -155,7 +163,7 @@ export default function MapScreen() {
             onPress={() => openSheet(group)}
             // tracksViewChanges: true only for selected city so the ring updates;
             // false for all others to avoid performance issues
-            tracksViewChanges={sheetCity?.ville === group.ville}
+            tracksViewChanges={true}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             {/*

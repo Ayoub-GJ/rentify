@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
+import UserAvatar from '../../components/UserAvatar';
 import {
   getUserById,
   getOrCreateConversation,
@@ -209,6 +210,7 @@ export default function ItemDetailScreen() {
         itemTitre: item.titre,
         itemImage: item.images[0] ?? '',
         otherUserName: fullName(owner),
+        otherUserId: item.proprietaireId,
       });
     } catch {
       Alert.alert('Erreur', "Impossible d'ouvrir la conversation.");
@@ -485,9 +487,7 @@ export default function ItemDetailScreen() {
           {/* C. Propriétaire (masqué si proprio ou non encore détecté) */}
           {!isOwn && context !== null && (
             <View style={styles.ownerCard}>
-              <View style={styles.ownerAvatar}>
-                <Text style={styles.ownerInitials}>{proprietaire.initiales}</Text>
-              </View>
+              <UserAvatar uid={item.proprietaireId ?? ''} size={44} name={proprietaire.nom} />
               <View style={styles.ownerInfo}>
                 <Text style={styles.ownerName}>{proprietaire.nom}</Text>
                 <Text style={styles.ownerLabel}>Propriétaire</Text>
@@ -592,14 +592,10 @@ export default function ItemDetailScreen() {
 
                 {/* List — max 3 */}
                 {reviews.slice(0, 3).map((review) => {
-                  const initial = (review.locataireName ?? '?')[0].toUpperCase();
-                  const avatarColor = avatarColorFromUid(review.locataireId);
                   return (
                     <View key={review.id} style={styles.reviewCard}>
                       <View style={styles.reviewHeader}>
-                        <View style={[styles.reviewAvatar, { backgroundColor: avatarColor }]}>
-                          <Text style={styles.reviewAvatarText}>{initial}</Text>
-                        </View>
+                        <UserAvatar uid={review.locataireId} size={36} name={review.locataireName ?? ''} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.reviewerName}>{review.locataireName}</Text>
                           <Text style={styles.reviewDate}>{formatDateShort(review.createdAt)}</Text>

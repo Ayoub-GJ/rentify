@@ -21,7 +21,6 @@ import StarRating from '../../components/StarRating';
 import { Item } from '../../types';
 import { SearchStackParamList } from '../../navigation/types';
 import { toMockItem } from '../../utils/itemHelpers';
-import { CITY_NAMES } from '../../utils/cityCoordinates';
 import {
   Colors,
   Typography,
@@ -110,6 +109,7 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [villeFilter, setVilleFilter] = useState('');
   const [pendingVilleFilter, setPendingVilleFilter] = useState('');
+  const [citySearchText, setCitySearchText] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -184,9 +184,21 @@ export default function SearchScreen() {
     return count;
   }, [activeCategory, filters, villeFilter]);
 
+  const uniqueCities = useMemo(
+    () => [...new Set(allItems.map(i => i.ville).filter(Boolean))].sort(),
+    [allItems],
+  );
+
+  const citySuggestions = useMemo(() => {
+    const q = citySearchText.trim().toLowerCase();
+    if (!q) return uniqueCities;
+    return uniqueCities.filter(c => c.toLowerCase().includes(q));
+  }, [citySearchText, uniqueCities]);
+
   function openModal() {
     setPendingFilters(filters);
     setPendingVilleFilter(villeFilter);
+    setCitySearchText(villeFilter);
     setShowFilters(true);
   }
 
@@ -199,6 +211,7 @@ export default function SearchScreen() {
   function resetFilters() {
     setPendingFilters(DEFAULT_FILTERS);
     setPendingVilleFilter('');
+    setCitySearchText('');
   }
 
   function resetAllFilters() {
@@ -421,39 +434,61 @@ export default function SearchScreen() {
             {/* Ville */}
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Ville</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.villeChipsScroll}
-                contentContainerStyle={styles.villeChipsList}
-              >
-                {/* "Toutes" chip */}
-                <TouchableOpacity
-                  style={[styles.chip, pendingVilleFilter === '' ? styles.chipActive : styles.chipInactive]}
-                  onPress={() => setPendingVilleFilter('')}
-                  activeOpacity={0.8}
+              <View style={styles.citySearchBox}>
+                <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+                <TextInput
+                  style={styles.citySearchInput}
+                  placeholder="Toutes les villes"
+                  placeholderTextColor={Colors.textTertiary}
+                  value={citySearchText}
+                  onChangeText={(text) => {
+                    setCitySearchText(text);
+                    if (!text) setPendingVilleFilter('');
+                  }}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                {citySearchText.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => { setCitySearchText(''); setPendingVilleFilter(''); }}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={18} color={Colors.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              {citySuggestions.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.villeChipsScroll}
+                  contentContainerStyle={styles.villeChipsList}
                 >
-                  <Text style={[styles.chipLabel, pendingVilleFilter === '' ? styles.chipLabelActive : styles.chipLabelInactive]}>
-                    Toutes
-                  </Text>
-                </TouchableOpacity>
-
-                {CITY_NAMES.map((ville) => {
-                  const active = pendingVilleFilter === ville;
-                  return (
-                    <TouchableOpacity
-                      key={ville}
-                      style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
-                      onPress={() => setPendingVilleFilter(active ? '' : ville)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.chipLabel, active ? styles.chipLabelActive : styles.chipLabelInactive]}>
-                        {ville}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                  {citySuggestions.map((ville) => {
+                    const active = pendingVilleFilter === ville;
+                    return (
+                      <TouchableOpacity
+                        key={ville}
+                        style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+                        onPress={() => {
+                          if (active) {
+                            setPendingVilleFilter('');
+                            setCitySearchText('');
+                          } else {
+                            setPendingVilleFilter(ville);
+                            setCitySearchText(ville);
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.chipLabel, active ? styles.chipLabelActive : styles.chipLabelInactive]}>
+                          {ville}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
             </View>
 
             {/* Buttons */}
@@ -874,9 +909,30 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
   },
 
+  // Ville search input
+  citySearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    backgroundColor: Colors.background,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  citySearchInput: {
+    flex: 1,
+    fontFamily: Typography.fontBody,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    padding: 0,
+  },
+
   // Ville chips (modal)
   villeChipsScroll: {
-    marginTop: Spacing.sm,
     flexGrow: 0,
   },
   villeChipsList: {

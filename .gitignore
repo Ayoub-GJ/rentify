@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -39,3 +40,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Fichiers internes de développement
+CLAUDE.md
+RENTIFY_HANDOVER_v2.md
+RENTIFY_HANDOVER_v3.md
+*.HANDOVER*.md
+PHASE*.md
+
+# Données de développement
+src/utils/seedFirestore.ts

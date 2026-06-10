@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import SmartImage from '../../components/SmartImage';
+import UserAvatar from '../../components/UserAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
@@ -115,6 +116,7 @@ function LocationCard({
         itemTitre: rental.itemTitre,
         itemImage: rental.itemImage,
         otherUserName: fullName(user),
+        otherUserId: rental.proprietaireId,
       });
     } catch {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
@@ -307,8 +309,6 @@ function DemandeCard({
   onReject: (id: string) => void;
 }) {
   const locataire = rental.otherUser;
-  const initiales = getInitials(locataire);
-  const avatarColor = avatarColorFromUid(rental.locataireId);
   const titre = locataire
     ? `${shortName(locataire)} veut louer`
     : 'Quelqu\'un veut louer';
@@ -321,9 +321,7 @@ function DemandeCard({
     >
       {/* Header : avatar + nom + badge */}
       <View style={styles.demandeHeader}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initiales}</Text>
-        </View>
+        <UserAvatar uid={rental.locataireId} size={40} name={fullName(locataire)} photoURL={locataire?.photoURL} />
         <View style={styles.demandeInfo}>
           <Text style={styles.demandeTitre} numberOfLines={1}>{titre}</Text>
           <Text style={styles.demandeObjet} numberOfLines={1}>{rental.itemTitre}</Text>
@@ -383,8 +381,6 @@ function ActiveDemandeCard({
   const [contacting, setContacting] = useState(false);
 
   const locataire = rental.otherUser;
-  const initiales = getInitials(locataire);
-  const avatarColor = avatarColorFromUid(rental.locataireId);
   const locataireNom = fullName(locataire);
 
   async function handleContact() {
@@ -403,6 +399,7 @@ function ActiveDemandeCard({
         itemTitre: rental.itemTitre,
         itemImage: rental.itemImage,
         otherUserName: locataireNom,
+        otherUserId: rental.locataireId,
       });
     } catch {
       Alert.alert('Erreur', "Impossible d'ouvrir la conversation.");
@@ -421,9 +418,7 @@ function ActiveDemandeCard({
     >
       {/* Header : avatar + nom + badge */}
       <View style={styles.demandeHeader}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initiales}</Text>
-        </View>
+        <UserAvatar uid={rental.locataireId} size={40} name={locataireNom} photoURL={locataire?.photoURL} />
         <View style={styles.demandeInfo}>
           <Text style={styles.demandeTitre} numberOfLines={1}>{locataireNom}</Text>
           <Text style={styles.demandeObjet} numberOfLines={1}>{actionLabel} {rental.itemTitre}</Text>
@@ -471,8 +466,6 @@ function PasseeDemandeCard({
   navigation: NavProp;
 }) {
   const locataire = rental.otherUser;
-  const initiales = getInitials(locataire);
-  const avatarColor = avatarColorFromUid(rental.locataireId);
   const locataireNom = fullName(locataire);
 
   return (
@@ -482,9 +475,7 @@ function PasseeDemandeCard({
       activeOpacity={0.75}
     >
       <View style={styles.demandeHeader}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initiales}</Text>
-        </View>
+        <UserAvatar uid={rental.locataireId} size={40} name={locataireNom} photoURL={locataire?.photoURL} />
         <View style={styles.demandeInfo}>
           <Text style={styles.demandeTitre} numberOfLines={1}>{locataireNom}</Text>
           <Text style={styles.demandeObjet} numberOfLines={1}>demandé par {shortName(locataire)}</Text>

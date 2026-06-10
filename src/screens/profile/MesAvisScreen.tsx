@@ -14,19 +14,15 @@ import { auth } from '../../config/firebase.config';
 import { getReviewsByProprietaire } from '../../services/firestoreService';
 import StarRating from '../../components/StarRating';
 import { Review } from '../../types';
-import { formatDateShort, avatarColorFromUid } from '../../utils/formatters';
+import { formatDateShort } from '../../utils/formatters';
+import UserAvatar from '../../components/UserAvatar';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 
 function ReviewCard({ review }: { review: Review }) {
-  const avatarColor = avatarColorFromUid(review.locataireId);
-  const initial = (review.locataireName ?? '?')[0].toUpperCase();
-
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </View>
+        <UserAvatar uid={review.locataireId} size={40} name={review.locataireName ?? ''} />
         <View style={styles.cardHeaderInfo}>
           <Text style={styles.reviewerName}>{review.locataireName}</Text>
           <Text style={styles.itemTitre} numberOfLines={1}>{review.itemTitre}</Text>

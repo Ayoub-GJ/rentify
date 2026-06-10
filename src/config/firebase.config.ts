@@ -3,6 +3,7 @@ import { initializeAuth, getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ENV } from './env';
 
 // getReactNativePersistence lives in @firebase/auth's RN build (dist/rn/index.js) at runtime
 // but is absent from firebase/auth's shared TypeScript declaration file (auth-public.d.ts).
@@ -12,12 +13,12 @@ const { getReactNativePersistence } = require('firebase/auth') as {
 };
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCCl7kfaCpuj4hdrR1Uh9kq7lM4nn__J5U",
-  authDomain: "rentify-app-67083.firebaseapp.com",
-  projectId: "rentify-app-67083",
-  storageBucket: "rentify-app-67083.firebasestorage.app",
-  messagingSenderId: "1072638859123",
-  appId: "1:1072638859123:web:a84c170960d172993bd706"
+  apiKey: ENV.FIREBASE_API_KEY,
+  authDomain: ENV.FIREBASE_AUTH_DOMAIN,
+  projectId: ENV.FIREBASE_PROJECT_ID,
+  storageBucket: ENV.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: ENV.FIREBASE_MESSAGING_SENDER_ID,
+  appId: ENV.FIREBASE_APP_ID,
 };
 
 // isFirstInit must be captured before initializeApp, because initializeApp adds to getApps().

@@ -14,5 +14,8 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
 export const CITY_NAMES: string[] = Object.keys(CITY_COORDS);
 
 export function getCityCoords(ville: string): { lat: number; lng: number } | null {
-  return CITY_COORDS[ville] ?? null;
+  if (CITY_COORDS[ville]) return CITY_COORDS[ville];
+  const normalized = ville.trim().toLowerCase();
+  const key = Object.keys(CITY_COORDS).find(k => k.toLowerCase() === normalized);
+  return key ? CITY_COORDS[key] : null;
 }

@@ -838,7 +838,7 @@ export const updateUserProfile = async (uid: string, updates: Partial<User>): Pr
 export const uploadUserAvatar = async (localUri: string, uid: string): Promise<string> => {
   try {
     const blob = await fetch(localUri).then(r => r.blob());
-    const storageRef = ref(storage, `avatars/${uid}.jpg`);
+    const storageRef = ref(storage, `avatars/${uid}/avatar.jpg`);
     await uploadBytes(storageRef, blob);
     return await getDownloadURL(storageRef);
   } catch (error) {

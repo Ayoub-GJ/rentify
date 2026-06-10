@@ -18,6 +18,7 @@ import {
 } from '../../services/firestoreService';
 import { Colors, Spacing, Radius, Typography, Layout } from '../../theme/theme';
 import { fullName, getInitials, avatarColorFromUid } from '../../utils/formatters';
+import UserAvatar from '../../components/UserAvatar';
 import { HomeStackParamList } from '../../navigation/types';
 
 type MessagesNavProp = StackNavigationProp<HomeStackParamList, 'Messages'>;
@@ -90,6 +91,7 @@ export default function MessagesScreen() {
       itemTitre: conv.itemTitre,
       itemImage: '',
       otherUserName: fullName(conv.otherUser),
+      otherUserId: conv.otherUserId,
       itemId: conv.itemId,
     });
   };
@@ -134,8 +136,6 @@ export default function MessagesScreen() {
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => {
-            const color = avatarColorFromUid(item.otherUserId);
-            const initials = getInitials(item.otherUser);
             const name = fullName(item.otherUser);
             const timeLabel = item.lastMessageAt.getTime() === 0
               ? ''
@@ -147,9 +147,7 @@ export default function MessagesScreen() {
                 onPress={() => handleOpenChat(item)}
                 activeOpacity={0.7}
               >
-                <View style={[styles.avatar, { backgroundColor: color }]}>
-                  <Text style={styles.avatarText}>{initials}</Text>
-                </View>
+                <UserAvatar uid={item.otherUserId} size={48} name={name} />
 
                 <View style={styles.content}>
                   <View style={styles.rowHeader}>

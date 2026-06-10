@@ -12,11 +12,10 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
-    // Avatars : path avatars/{uid}.jpg — un user ne peut modifier que SA photo.
-    // Le split('.')[0] extrait le uid du nom de fichier "abc123.jpg" → "abc123".
-    match /avatars/{userId} {
+    // Avatars : path avatars/{uid}/avatar.jpg — un user ne peut modifier que SA photo.
+    match /avatars/{userId}/{fileName} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId.split('.')[0];
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     // Images de chat : conversations/{conversationId}/{timestamp}.jpg

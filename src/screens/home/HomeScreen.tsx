@@ -32,6 +32,7 @@ import {
   Categories,
 } from '../../theme/theme';
 import { HomeStackParamList } from '../../navigation/types';
+import AIAssistant from '../../components/AIAssistant';
 
 type HomeNavProp = StackNavigationProp<HomeStackParamList, 'HomeScreen'>;
 
@@ -273,6 +274,7 @@ export default function HomeScreen() {
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
+        <AIAssistant items={[]} />
       </View>
     );
   }
@@ -295,6 +297,7 @@ export default function HomeScreen() {
           </View>
         }
       />
+      <AIAssistant items={items} />
     </View>
   );
 }
@@ -307,7 +310,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   listContent: {
-    paddingBottom: Spacing['4xl'],
+    paddingBottom: 160,
   },
 
   // ── Header ──
