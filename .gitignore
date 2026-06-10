@@ -50,3 +50,6 @@ PHASE*.md
 
 # Données de développement
 src/utils/seedFirestore.ts
+
+# Dossier mémoire interne
+memory/
