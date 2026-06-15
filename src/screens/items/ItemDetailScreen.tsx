@@ -432,7 +432,12 @@ export default function ItemDetailScreen() {
             renderItem={({ item: uri }) => (
               <SmartImage
                 uri={uri}
-                style={{ width: SCREEN_WIDTH, height: 320 }}
+                style={{
+                  width: SCREEN_WIDTH,
+                  height: 320,
+                  borderBottomLeftRadius: Radius['2xl'],
+                  borderBottomRightRadius: Radius['2xl'],
+                }}
                 resizeMode="cover"
               />
             )}
@@ -653,9 +658,6 @@ const styles = StyleSheet.create({
   // ── Hero ──
   heroWrap: {
     height: 320,
-    borderBottomLeftRadius: Radius['2xl'],
-    borderBottomRightRadius: Radius['2xl'],
-    overflow: 'hidden',
   },
   heroButton: {
     position: 'absolute',
