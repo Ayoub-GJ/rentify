@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -88,10 +88,7 @@ export default function ItemDetailScreen() {
   const [context, setContext] = useState<ItemContext | null>(null);
   const [itemRating, setItemRating] = useState({ average: 0, count: 0 });
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [imgIndex, setImgIndex] = useState(0);
-  const imgRef = useRef<FlatList>(null);
-
-  // Charger le nom du proprio une seule fois (si placeholder)
+// Charger le nom du proprio une seule fois (si placeholder)
   useEffect(() => {
     if (proprietaire.nom === 'Propriétaire' && item.proprietaireId) {
       getUserById(item.proprietaireId).then((user) => {
@@ -427,16 +424,11 @@ export default function ItemDetailScreen() {
         {/* ── Image hero ── */}
         <View style={{ height: 320 }}>
           <FlatList
-            ref={imgRef}
             data={item.images.length > 0 ? item.images : ['']}
             keyExtractor={(_, i) => String(i)}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={e => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setImgIndex(idx);
-            }}
             renderItem={({ item: uri }) => (
               <SmartImage
                 uri={uri}
@@ -445,14 +437,6 @@ export default function ItemDetailScreen() {
               />
             )}
           />
-
-          {item.images.length > 1 && (
-            <View style={styles.imgDots}>
-              {item.images.map((_, i) => (
-                <View key={i} style={[styles.imgDot, i === imgIndex && styles.imgDotActive]} />
-              ))}
-            </View>
-          )}
 
           <TouchableOpacity
             style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
@@ -670,28 +654,6 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: 320,
-  },
-  imgDots: {
-    position: 'absolute',
-    bottom: Spacing.lg,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  imgDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  imgDotActive: {
-    width: 20,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: Colors.primary,
   },
   heroButton: {
     position: 'absolute',
