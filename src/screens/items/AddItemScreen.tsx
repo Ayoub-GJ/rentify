@@ -116,6 +116,7 @@ export default function AddItemScreen() {
   const [uploading, setUploading] = useState(false);
   const [loadingItem, setLoadingItem] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [recapImgIdx, setRecapImgIdx] = useState(0);
   const slideAnim = useRef(new Animated.Value(0)).current;
   // Tracks which itemId we've already loaded to avoid reloading on every focus
   const loadedItemIdRef = useRef<string | null>(null);
@@ -599,12 +600,40 @@ export default function AddItemScreen() {
 
   function renderStep3() {
     const categoryInfo = Categories.find(c => c.id === formData.categorie);
-    const firstPhoto = formData.photos[0];
+    const photos = formData.photos;
+    const recapPhotoWidth = screenWidth - Layout.screenPadding * 2;
 
     return (
       <View style={styles.stepContent}>
-        {firstPhoto ? (
-          <Image source={{ uri: firstPhoto }} style={styles.recapPhoto} resizeMode="cover" />
+        {photos.length > 0 ? (
+          <View>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.recapPhoto}
+              onMomentumScrollEnd={e => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / recapPhotoWidth);
+                setRecapImgIdx(idx);
+              }}
+            >
+              {photos.map((uri, i) => (
+                <Image
+                  key={i}
+                  source={{ uri }}
+                  style={{ width: recapPhotoWidth, height: 160, borderRadius: Radius.lg }}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+            {photos.length > 1 && (
+              <View style={styles.recapImgDots}>
+                {photos.map((_, i) => (
+                  <View key={i} style={[styles.recapImgDot, i === recapImgIdx && styles.recapImgDotActive]} />
+                ))}
+              </View>
+            )}
+          </View>
         ) : (
           <View style={[styles.recapPhoto, styles.recapPhotoPlaceholder]}>
             <Ionicons name="image-outline" size={48} color={Colors.textTertiary} />
@@ -1041,6 +1070,23 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontBody,
     fontSize: Typography.size.sm,
     color: Colors.textTertiary,
+  },
+  recapImgDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+  },
+  recapImgDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
+  },
+  recapImgDotActive: {
+    backgroundColor: Colors.primary,
+    width: 18,
+    borderRadius: 3,
   },
   recapCard: {
     backgroundColor: Colors.surface,

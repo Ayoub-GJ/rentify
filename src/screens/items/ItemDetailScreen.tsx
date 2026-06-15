@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Dimensions,
 } from 'react-native';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 import SmartImage from '../../components/SmartImage';
 import UserAvatar from '../../components/UserAvatar';
 import {
@@ -84,6 +88,8 @@ export default function ItemDetailScreen() {
   const [context, setContext] = useState<ItemContext | null>(null);
   const [itemRating, setItemRating] = useState({ average: 0, count: 0 });
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [imgIndex, setImgIndex] = useState(0);
+  const imgRef = useRef<FlatList>(null);
 
   // Charger le nom du proprio une seule fois (si placeholder)
   useEffect(() => {
@@ -419,12 +425,34 @@ export default function ItemDetailScreen() {
         contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
       >
         {/* ── Image hero ── */}
-        <View>
-          <SmartImage
-            uri={item.images[0] ?? ''}
-            style={styles.heroImage}
-            resizeMode="cover"
+        <View style={{ height: 320 }}>
+          <FlatList
+            ref={imgRef}
+            data={item.images.length > 0 ? item.images : ['']}
+            keyExtractor={(_, i) => String(i)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={e => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setImgIndex(idx);
+            }}
+            renderItem={({ item: uri }) => (
+              <SmartImage
+                uri={uri}
+                style={{ width: SCREEN_WIDTH, height: 320 }}
+                resizeMode="cover"
+              />
+            )}
           />
+
+          {item.images.length > 1 && (
+            <View style={styles.imgDots}>
+              {item.images.map((_, i) => (
+                <View key={i} style={[styles.imgDot, i === imgIndex && styles.imgDotActive]} />
+              ))}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
@@ -642,6 +670,26 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: 320,
+  },
+  imgDots: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  imgDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  imgDotActive: {
+    backgroundColor: 'rgba(255,255,255,1)',
+    width: 18,
+    borderRadius: 3,
   },
   heroButton: {
     position: 'absolute',
