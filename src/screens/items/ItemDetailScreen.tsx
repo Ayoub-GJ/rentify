@@ -425,56 +425,60 @@ export default function ItemDetailScreen() {
         contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
       >
         {/* ── Image hero ── */}
-        <View style={{ height: 320 }}>
-          <FlatList
-            ref={imgRef}
-            data={item.images.length > 0 ? item.images : ['']}
-            keyExtractor={(_, i) => String(i)}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={e => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-              setImgIndex(idx);
-            }}
-            renderItem={({ item: uri }) => (
-              <SmartImage
-                uri={uri}
-                style={{ width: SCREEN_WIDTH, height: 320 }}
-                resizeMode="cover"
+        <View>
+          <View style={{ height: 320 }}>
+            <FlatList
+              ref={imgRef}
+              data={item.images.length > 0 ? item.images : ['']}
+              keyExtractor={(_, i) => String(i)}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={e => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setImgIndex(idx);
+              }}
+              renderItem={({ item: uri }) => (
+                <SmartImage
+                  uri={uri}
+                  style={{ width: SCREEN_WIDTH, height: 320 }}
+                  resizeMode="cover"
+                />
+              )}
+            />
+
+            <TouchableOpacity
+              style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.heroButton, styles.heroButtonRight, { top: insets.top + Spacing.md }]}
+              onPress={toggleFav}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={isFav ? 'heart' : 'heart-outline'}
+                size={22}
+                color={isFav ? Colors.error : Colors.textPrimary}
               />
+            </TouchableOpacity>
+
+            {categoryInfo && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryBadgeText}>{categoryInfo.label}</Text>
+              </View>
             )}
-          />
+          </View>
 
           {item.images.length > 1 && (
-            <View style={styles.imgCounter}>
-              <Text style={styles.imgCounterText}>{imgIndex + 1} / {item.images.length}</Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.heroButton, styles.heroButtonRight, { top: insets.top + Spacing.md }]}
-            onPress={toggleFav}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name={isFav ? 'heart' : 'heart-outline'}
-              size={22}
-              color={isFav ? Colors.error : Colors.textPrimary}
-            />
-          </TouchableOpacity>
-
-          {categoryInfo && (
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>{categoryInfo.label}</Text>
+            <View style={styles.imgDots}>
+              {item.images.map((_, i) => (
+                <View key={i} style={[styles.imgDot, i === imgIndex && styles.imgDotActive]} />
+              ))}
             </View>
           )}
         </View>
@@ -669,19 +673,25 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 320,
   },
-  imgCounter: {
-    position: 'absolute',
-    bottom: Spacing.md,
-    right: Layout.screenPadding,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
+  imgDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.background,
   },
-  imgCounterText: {
-    color: '#fff',
-    fontSize: 12,
-    fontFamily: Typography.fontBody,
+  imgDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
+  },
+  imgDotActive: {
+    width: 18,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.primary,
   },
   heroButton: {
     position: 'absolute',
