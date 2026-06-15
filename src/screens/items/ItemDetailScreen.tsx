@@ -425,60 +425,58 @@ export default function ItemDetailScreen() {
         contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
       >
         {/* ── Image hero ── */}
-        <View>
-          <View style={{ height: 320 }}>
-            <FlatList
-              ref={imgRef}
-              data={item.images.length > 0 ? item.images : ['']}
-              keyExtractor={(_, i) => String(i)}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={e => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                setImgIndex(idx);
-              }}
-              renderItem={({ item: uri }) => (
-                <SmartImage
-                  uri={uri}
-                  style={{ width: SCREEN_WIDTH, height: 320 }}
-                  resizeMode="cover"
-                />
-              )}
-            />
-
-            <TouchableOpacity
-              style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.heroButton, styles.heroButtonRight, { top: insets.top + Spacing.md }]}
-              onPress={toggleFav}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name={isFav ? 'heart' : 'heart-outline'}
-                size={22}
-                color={isFav ? Colors.error : Colors.textPrimary}
+        <View style={{ height: 320 }}>
+          <FlatList
+            ref={imgRef}
+            data={item.images.length > 0 ? item.images : ['']}
+            keyExtractor={(_, i) => String(i)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={e => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setImgIndex(idx);
+            }}
+            renderItem={({ item: uri }) => (
+              <SmartImage
+                uri={uri}
+                style={{ width: SCREEN_WIDTH, height: 320 }}
+                resizeMode="cover"
               />
-            </TouchableOpacity>
-
-            {categoryInfo && (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{categoryInfo.label}</Text>
-              </View>
             )}
-          </View>
+          />
 
           {item.images.length > 1 && (
             <View style={styles.imgDots}>
               {item.images.map((_, i) => (
                 <View key={i} style={[styles.imgDot, i === imgIndex && styles.imgDotActive]} />
               ))}
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.heroButton, styles.heroButtonRight, { top: insets.top + Spacing.md }]}
+            onPress={toggleFav}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={isFav ? 'heart' : 'heart-outline'}
+              size={22}
+              color={isFav ? Colors.error : Colors.textPrimary}
+            />
+          </TouchableOpacity>
+
+          {categoryInfo && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>{categoryInfo.label}</Text>
             </View>
           )}
         </View>
@@ -674,18 +672,20 @@ const styles = StyleSheet.create({
     height: 320,
   },
   imgDots: {
+    position: 'absolute',
+    bottom: Spacing.lg,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.background,
+    gap: 6,
   },
   imgDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Colors.textTertiary,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   imgDotActive: {
     width: 20,
