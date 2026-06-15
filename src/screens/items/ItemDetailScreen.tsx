@@ -447,10 +447,8 @@ export default function ItemDetailScreen() {
           />
 
           {item.images.length > 1 && (
-            <View style={styles.imgDots}>
-              {item.images.map((_, i) => (
-                <View key={i} style={[styles.imgDot, i === imgIndex && styles.imgDotActive]} />
-              ))}
+            <View style={styles.imgCounter}>
+              <Text style={styles.imgCounterText}>{imgIndex + 1} / {item.images.length}</Text>
             </View>
           )}
 
@@ -671,25 +669,19 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 320,
   },
-  imgDots: {
+  imgCounter: {
     position: 'absolute',
     bottom: Spacing.md,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
+    right: Layout.screenPadding,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
   },
-  imgDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  imgDotActive: {
-    backgroundColor: 'rgba(255,255,255,1)',
-    width: 18,
-    borderRadius: 3,
+  imgCounterText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: Typography.fontBody,
   },
   heroButton: {
     position: 'absolute',
