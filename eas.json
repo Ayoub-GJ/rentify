@@ -8,12 +8,13 @@
       "developmentClient": true,
       "distribution": "internal"
     },
-    "preview": {
+  "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "android": {
-        "buildType": "apk"
-      }
-    },
+          "buildType": "apk"
+  }
+},
     "production": {
       "android": {
         "buildType": "app-bundle"
