@@ -42,6 +42,7 @@ module.exports = {
       },
     },
     android: {
+      package: 'com.rentify.app',
       adaptiveIcon: {
         foregroundImage: './assets/logo.png',
         backgroundColor: '#E85D26',
