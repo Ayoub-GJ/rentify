@@ -159,7 +159,7 @@ export default function ProfileScreen() {
 
   // ── Avatar ──
 
-  const handlePickAvatar = async () => {
+  const pickAndUploadAvatar = async () => {
     if (!uid) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'] as any,
@@ -178,6 +178,32 @@ export default function ProfileScreen() {
       } finally {
         setUploadingAvatar(false);
       }
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!uid) return;
+    setUploadingAvatar(true);
+    try {
+      await updateUserProfile(uid, { photoURL: '' });
+      setProfile(prev => prev ? { ...prev, photoURL: '' } : prev);
+    } catch {
+      Alert.alert('Erreur', "Impossible de supprimer la photo.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handlePickAvatar = () => {
+    if (!uid) return;
+    if (profile?.photoURL) {
+      Alert.alert('Photo de profil', undefined, [
+        { text: 'Modifier la photo', onPress: pickAndUploadAvatar },
+        { text: 'Supprimer la photo', style: 'destructive', onPress: handleRemoveAvatar },
+        { text: 'Annuler', style: 'cancel' },
+      ]);
+    } else {
+      pickAndUploadAvatar();
     }
   };
 

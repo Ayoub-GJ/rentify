@@ -422,7 +422,7 @@ export default function ItemDetailScreen() {
         contentContainerStyle={{ paddingBottom: scrollPaddingBottom }}
       >
         {/* ── Image hero ── */}
-        <View style={{ height: 320 }}>
+        <View style={styles.heroWrap}>
           <FlatList
             data={item.images.length > 0 ? item.images : ['']}
             keyExtractor={(_, i) => String(i)}
@@ -651,9 +651,11 @@ const styles = StyleSheet.create({
   },
 
   // ── Hero ──
-  heroImage: {
-    width: '100%',
+  heroWrap: {
     height: 320,
+    borderBottomLeftRadius: Radius['2xl'],
+    borderBottomRightRadius: Radius['2xl'],
+    overflow: 'hidden',
   },
   heroButton: {
     position: 'absolute',
