@@ -63,6 +63,9 @@ module.exports = {
       firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? '',
       firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID ?? '',
       firebaseAppId: process.env.FIREBASE_APP_ID ?? '',
+      eas: {
+        projectId: 'e4abb09f-100f-40f3-846f-e7fa7688d57c',
+      },
     },
   },
 };
