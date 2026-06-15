@@ -180,6 +180,11 @@ export default function AddItemScreen() {
 
   function goBack() {
     if (isEditMode) {
+      loadedItemIdRef.current = null;
+      setFormData(EMPTY_FORM);
+      setEditingItemId(null);
+      setCurrentStep(1);
+      navigation.setParams({ itemId: undefined } as any);
       navigation.goBack();
     } else {
       navigation.dispatch(TabActions.jumpTo('Home'));

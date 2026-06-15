@@ -682,15 +682,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   imgDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.textTertiary,
   },
   imgDotActive: {
-    width: 18,
-    height: 6,
-    borderRadius: 3,
+    width: 20,
+    height: 7,
+    borderRadius: 4,
     backgroundColor: Colors.primary,
   },
   heroButton: {
