@@ -54,7 +54,7 @@ module.exports = {
     web: {
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-font', '@react-native-community/datetimepicker', 'react-native-maps'],
+    plugins: ['expo-font', '@react-native-community/datetimepicker'],
     extra: {
       openaiApiKey: process.env.OPENAI_API_KEY ?? '',
       firebaseApiKey: process.env.FIREBASE_API_KEY ?? '',
