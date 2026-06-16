@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Marker, Region, UrlTile } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -150,11 +150,18 @@ export default function MapScreen() {
       <MapView
         ref={mapRef}
         style={styles.map}
+        provider={null}
+        mapType="none"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
         onPress={() => sheetCity && closeSheet()}
       >
+        <UrlTile
+          urlTemplate="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+          maximumZ={19}
+          flipY={false}
+        />
         {cityGroups.map((group) => (
           <Marker
             key={group.ville}
