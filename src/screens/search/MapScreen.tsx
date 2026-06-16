@@ -150,8 +150,6 @@ export default function MapScreen() {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={null}
-        mapType="none"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}

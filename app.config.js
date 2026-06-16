@@ -28,7 +28,7 @@ module.exports = {
     orientation: 'portrait',
     icon: './assets/logo.png',
     userInterfaceStyle: 'light',
-    newArchEnabled: true,
+    newArchEnabled: false,
     splash: {
       image: './assets/logo.png',
       resizeMode: 'contain',
