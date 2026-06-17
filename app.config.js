@@ -28,7 +28,7 @@ module.exports = {
     orientation: 'portrait',
     icon: './assets/logo.png',
     userInterfaceStyle: 'light',
-    newArchEnabled: false,
+    newArchEnabled: true,
     splash: {
       image: './assets/logo.png',
       resizeMode: 'contain',
@@ -36,6 +36,10 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
+      bundleIdentifier: 'com.rentify.app',
+      config: {
+        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_IOS,
+      },
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'Rentify utilise votre position pour afficher les objets à louer près de vous et calculer les distances.',
@@ -43,6 +47,11 @@ module.exports = {
     },
     android: {
       package: 'com.rentify.app',
+      config: {
+        googleMaps: {
+          apiKey: process.env.GOOGLE_MAPS_API_KEY_ANDROID,
+        },
+      },
       adaptiveIcon: {
         foregroundImage: './assets/logo.png',
         backgroundColor: '#E85D26',
