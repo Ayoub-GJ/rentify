@@ -168,7 +168,7 @@ export default function MapScreen() {
             onPress={() => openSheet(group)}
             // tracksViewChanges: true only for selected city so the ring updates;
             // false for all others to avoid performance issues
-            tracksViewChanges={true}
+            tracksViewChanges={sheetCity?.ville === group.ville}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             {/*
@@ -344,7 +344,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 6,
-    overflow: 'hidden',
     maxWidth: 80,
     textAlign: 'center',
   },
