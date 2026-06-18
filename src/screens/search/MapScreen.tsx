@@ -43,6 +43,44 @@ interface CityGroup {
   items: Item[];
 }
 
+interface CityMarkerProps {
+  group: CityGroup;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+function CityMarker({ group, isActive, onPress }: CityMarkerProps) {
+  const [tracks, setTracks] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setTracks(isActive), 1000);
+    return () => clearTimeout(t);
+  }, [isActive]);
+
+  return (
+    <Marker
+      coordinate={{ latitude: group.latitude, longitude: group.longitude }}
+      onPress={onPress}
+      tracksViewChanges={tracks}
+      anchor={{ x: 0.5, y: 1 }}
+    >
+      <View style={styles.markerWrapper}>
+        <View style={[styles.markerPin, isActive && styles.markerPinActive]}>
+          <Text style={styles.markerCount}>{group.items.length}</Text>
+        </View>
+        <View style={styles.markerPinTail} />
+        <View style={[styles.markerLabel, isActive && styles.markerLabelActive]}>
+          <Text
+            style={[styles.markerLabelText, isActive && { color: Colors.textInverse }]}
+            numberOfLines={1}
+          >
+            {group.ville}
+          </Text>
+        </View>
+      </View>
+    </Marker>
+  );
+}
+
 export default function MapScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
@@ -161,35 +199,12 @@ export default function MapScreen() {
           flipY={false}
         />
         {cityGroups.map((group) => (
-          <Marker
+          <CityMarker
             key={group.ville}
-            coordinate={{ latitude: group.latitude, longitude: group.longitude }}
-            // onPress on Marker is the primary handler
+            group={group}
+            isActive={sheetCity?.ville === group.ville}
             onPress={() => openSheet(group)}
-            // tracksViewChanges: true only for selected city so the ring updates;
-            // false for all others to avoid performance issues
-            tracksViewChanges={sheetCity?.ville === group.ville}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            {/*
-              TouchableOpacity inside the Marker is the fallback handler.
-              It solves Android elevation / touch-intercept issues on custom views.
-              No elevation/shadow on the View itself to avoid Android touch conflicts.
-            */}
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={() => openSheet(group)}
-              style={styles.markerWrapper}
-            >
-              <View style={[
-                styles.markerCircle,
-                sheetCity?.ville === group.ville && styles.markerCircleActive,
-              ]}>
-                <Text style={styles.markerCount}>{group.items.length}</Text>
-              </View>
-              <Text style={styles.markerLabel} numberOfLines={1}>{group.ville}</Text>
-            </TouchableOpacity>
-          </Marker>
+          />
         ))}
       </MapView>
 
@@ -306,45 +321,68 @@ const styles = StyleSheet.create({
   // Map
   map: { flex: 1 },
 
-  // Marker — NO elevation/shadow on the View to avoid Android touch conflicts
   markerWrapper: {
     alignItems: 'center',
-    gap: 3,
   },
-  markerCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  markerPin: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    // Shadow iOS only (no elevation — elevation breaks Android touch on custom markers)
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  markerCircleActive: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
     borderWidth: 3,
     borderColor: Colors.textInverse,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  markerPinActive: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 4,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  markerPinTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: Colors.textInverse,
+    marginTop: -2,
   },
   markerCount: {
     fontFamily: Typography.fontDisplay,
-    fontSize: 14,
+    fontSize: 16,
     color: Colors.textInverse,
   },
   markerLabel: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    marginTop: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+    maxWidth: 100,
+  },
+  markerLabelActive: {
+    backgroundColor: Colors.primary,
+  },
+  markerLabelText: {
     fontFamily: Typography.fontHeading,
     fontSize: 11,
     color: Colors.textPrimary,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 6,
-    maxWidth: 80,
     textAlign: 'center',
   },
 
