@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+import ImageView from 'react-native-image-viewing';
 import SmartImage from '../../components/SmartImage';
 import UserAvatar from '../../components/UserAvatar';
 import {
@@ -88,6 +89,18 @@ export default function ItemDetailScreen() {
   const [context, setContext] = useState<ItemContext | null>(null);
   const [itemRating, setItemRating] = useState({ average: 0, count: 0 });
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [viewerVisible, setViewerVisible] = useState(false);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+    if (viewableItems.length > 0) {
+      setActiveIndex(viewableItems[0].index ?? 0);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
 // Charger le nom du proprio une seule fois (si placeholder)
   useEffect(() => {
     if (proprietaire.nom === 'Propriétaire' && item.proprietaireId) {
@@ -429,19 +442,37 @@ export default function ItemDetailScreen() {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
             renderItem={({ item: uri }) => (
-              <SmartImage
-                uri={uri}
-                style={{
-                  width: SCREEN_WIDTH,
-                  height: 320,
-                  borderBottomLeftRadius: Radius['2xl'],
-                  borderBottomRightRadius: Radius['2xl'],
-                }}
-                resizeMode="cover"
-              />
+              <TouchableOpacity
+                activeOpacity={0.95}
+                onPress={() => item.images && item.images.length > 0 && setViewerVisible(true)}
+              >
+                <SmartImage
+                  uri={uri}
+                  style={{
+                    width: SCREEN_WIDTH,
+                    height: 320,
+                    borderBottomLeftRadius: Radius['2xl'],
+                    borderBottomRightRadius: Radius['2xl'],
+                  }}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
             )}
           />
+
+          {item.images && item.images.length > 1 && (
+            <View style={[styles.dotsContainer, { bottom: Spacing.lg }]}>
+              {item.images.map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.dot, i === activeIndex && styles.dotActive]}
+                />
+              ))}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.heroButton, styles.heroButtonLeft, { top: insets.top + Spacing.md }]}
@@ -643,6 +674,17 @@ export default function ItemDetailScreen() {
       </ScrollView>
 
       {renderFooter()}
+
+      <ImageView
+        images={(item.images ?? []).filter(Boolean).map((uri) => ({ uri }))}
+        imageIndex={activeIndex}
+        visible={viewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        swipeToCloseEnabled
+        doubleTapToZoomEnabled
+        presentationStyle="fullScreen"
+        backgroundColor="#000"
+      />
     </View>
   );
 }
@@ -658,6 +700,28 @@ const styles = StyleSheet.create({
   // ── Hero ──
   heroWrap: {
     height: 320,
+  },
+  dotsContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  dotActive: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
   },
   heroButton: {
     position: 'absolute',
