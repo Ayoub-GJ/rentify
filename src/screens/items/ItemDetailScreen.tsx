@@ -464,7 +464,7 @@ export default function ItemDetailScreen() {
           />
 
           {item.images && item.images.length > 1 && (
-            <View style={[styles.dotsContainer, { bottom: Spacing.lg }]}>
+            <View style={styles.dotsContainer}>
               {item.images.map((_, i) => (
                 <View
                   key={i}
@@ -703,6 +703,7 @@ const styles = StyleSheet.create({
   },
   dotsContainer: {
     position: 'absolute',
+    bottom: 32,
     alignSelf: 'center',
     flexDirection: 'row',
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
