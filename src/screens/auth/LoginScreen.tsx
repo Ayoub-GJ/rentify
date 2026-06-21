@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { login, resetPassword } from '../../services/authService';
+import { signInWithGoogle } from '../../services/googleAuthService';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme/theme';
 
 interface LoginScreenProps {
@@ -74,6 +75,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       setLoading(false);
     }
   }, [email, password]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      // Navigation auto via le auth listener existant
+    } catch (err: any) {
+      if (err?.code === 'SIGN_IN_CANCELLED' || err?.code === '-5') return;
+      console.error('[GoogleSignIn]', err);
+      Alert.alert('Erreur', 'Impossible de se connecter avec Google. Réessaye.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const handleResetPassword = useCallback(async (emailToReset: string) => {
     const trimmed = emailToReset.trim();
@@ -276,11 +292,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                 style={styles.googleButton}
                 activeOpacity={0.8}
                 disabled={loading}
-                onPress={() => Alert.alert(
-                  'Google Sign-In',
-                  'La connexion avec Google sera disponible dans la version finale.',
-                  [{ text: 'OK' }]
-                )}
+                onPress={handleGoogleSignIn}
                 accessibilityRole="button"
                 accessibilityLabel="Continuer avec Google"
               >

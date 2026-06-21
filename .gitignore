@@ -53,3 +53,7 @@ src/utils/seedFirestore.ts
 
 # Dossier mémoire interne
 memory/
+
+# Firebase
+google-services.json
+GoogleService-Info.plist

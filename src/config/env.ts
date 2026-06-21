@@ -11,6 +11,7 @@ export const ENV = (() => {
     FIREBASE_STORAGE_BUCKET: (extra.firebaseStorageBucket as string) ?? '',
     FIREBASE_MESSAGING_SENDER_ID: (extra.firebaseMessagingSenderId as string) ?? '',
     FIREBASE_APP_ID: (extra.firebaseAppId as string) ?? '',
+    GOOGLE_WEB_CLIENT_ID: (extra.googleWebClientId as string) ?? '',
   };
   console.log('[ENV] OpenAI key starts with:', keys.OPENAI_API_KEY.substring(0, 10) || 'EMPTY');
   return keys;

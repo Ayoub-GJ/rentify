@@ -47,6 +47,7 @@ module.exports = {
     },
     android: {
       package: 'com.rentify.app',
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
       config: {
         googleMaps: {
           apiKey: process.env.GOOGLE_MAPS_API_KEY_ANDROID,
@@ -63,9 +64,23 @@ module.exports = {
     web: {
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-font', '@react-native-community/datetimepicker'],
+    plugins: [
+      'expo-font',
+      '@react-native-community/datetimepicker',
+      '@react-native-google-signin/google-signin',
+      [
+        'expo-build-properties',
+        {
+          android: {
+            extraMavenRepos: ['../../node_modules/expo-build-properties/android/repos'],
+          },
+        },
+      ],
+    ],
     extra: {
       openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+      googleWebClientId:
+        '1072638859123-75t9r887jc0b9g40iimnhvebcm0cgo2u.apps.googleusercontent.com',
       firebaseApiKey: process.env.FIREBASE_API_KEY ?? '',
       firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN ?? '',
       firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',

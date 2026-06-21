@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { signup } from '../../services/authService';
+import { signInWithGoogle } from '../../services/googleAuthService';
 import { Colors, Typography, Spacing, Radius } from '../../theme/theme';
 
 interface SignupScreenProps {
@@ -86,6 +87,21 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       setLoading(false);
     }
   }, [prenom, nom, email, telephone, password]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      // Navigation auto via le auth listener existant
+    } catch (err: any) {
+      if (err?.code === 'SIGN_IN_CANCELLED' || err?.code === '-5') return;
+      console.error('[GoogleSignIn]', err);
+      Alert.alert('Erreur', 'Impossible de se connecter avec Google. Réessaye.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const borderFor = (field: typeof focusedInput) =>
     focusedInput === field ? Colors.primary : Colors.border;
@@ -323,11 +339,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 style={styles.googleButton}
                 activeOpacity={0.8}
                 disabled={loading}
-                onPress={() => Alert.alert(
-                  'Google Sign-In',
-                  'La connexion avec Google sera disponible dans la version finale.',
-                  [{ text: 'OK' }]
-                )}
+                onPress={handleGoogleSignIn}
                 accessibilityRole="button"
                 accessibilityLabel="Continuer avec Google"
               >
